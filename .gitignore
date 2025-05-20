@@ -1,0 +1,3 @@
+echo "venCALCROI/" >> .gitignore
+echo "__pycache__/" >> .gitignore
+echo "*.pyc" >> .gitignore
