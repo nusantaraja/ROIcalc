@@ -29,7 +29,7 @@ from googleapiclient.errors import HttpError
 st.set_page_config(layout="wide", page_title="Kalkulator ROI AI Voice Broker")
 
 # --- Konfigurasi Awal Lainnya ---
-PROVIDER_COMPANY_NAME = "MEDIA SOLUSI AI, group of PT. EKUITAS MEDIA INVESTAMA"
+PROVIDER_COMPANY_NAME = "MEDIA AI SOLUSI, group of PT. EKUITAS MEDIA INVESTAMA"
 LOG_SHEET_NAME = "Log Proposal" # Nama sheet/tab di dalam Google Sheet
 
 # Set locale ke Indonesian (Hapus warning jika gagal)
@@ -188,15 +188,6 @@ def get_gdrive_service(credentials_info):
     except Exception as e:
         st.error(f"Gagal membuat service Google Drive: {e}")
         return None
-        
-# Sebelum memanggil get_next_proposal_number atau log_to_gsheet
-try:
-    # Cek apakah sheet ada
-    spreadsheet = gsheets_service.spreadsheets().get(spreadsheetId=google_sheet_id).execute()
-    sheet_names = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
-    st.write(f"Sheet yang tersedia: {sheet_names}")
-except Exception as e:
-    st.error(f"Gagal memeriksa sheet: {e}")
 
 def get_gsheets_service(credentials_info):
     """Membuat service Google Sheets."""
@@ -214,27 +205,25 @@ def get_gsheets_service(credentials_info):
 def get_next_proposal_number(service, sheet_id):
     """Mendapatkan nomor proposal berikutnya dari Google Sheet."""
     try:
-        # Modifikasi range untuk menghindari error parsing
-        range_name = f"'{LOG_SHEET_NAME}'!B2:B"  # Tambahkan tanda kutip pada nama sheet
-        
-        result = service.spreadsheets().values().get(
-            spreadsheetId=sheet_id, 
-            range=range_name
-        ).execute()
-        
+        # Asumsi: Kolom B (indeks 1) berisi nomor proposal
+        # Asumsi: Data dimulai dari baris 2 (baris 1 header)
+        # Baca kolom B saja untuk efisiensi
+        range_name = f"{LOG_SHEET_NAME}!B2:B"
+        result = service.spreadsheets().values().get(spreadsheetId=sheet_id, range=range_name).execute()
         values = result.get('values', [])
 
         today_prefix = "PROP-" + datetime.now().strftime("%y%m%d") + "-"
         last_number = 0
 
         if values:
+            # Cari nomor terakhir untuk tanggal hari ini
             for row in reversed(values):
                 if row and row[0].startswith(today_prefix):
                     try:
                         last_number = int(row[0].split('-')[-1])
                         break
                     except (IndexError, ValueError):
-                        continue
+                        continue # Abaikan format yang salah
 
         next_number = last_number + 1
         return f"{today_prefix}{next_number:03d}"
@@ -249,9 +238,7 @@ def get_next_proposal_number(service, sheet_id):
 def log_to_gsheet(service, sheet_id, log_data):
     """Mencatat data proposal ke Google Sheet."""
     try:
-        # Modifikasi range untuk menghindari error parsing
-        range_name = f"'{LOG_SHEET_NAME}'!A1"  # Tambahkan tanda kutip pada nama sheet
-        
+        # Asumsi urutan kolom: Timestamp, Proposal No, Agent Name, Agent Email, Agent Phone, Prospect Name, Prospect Location, GDrive Link
         values = [
             [
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -269,10 +256,11 @@ def log_to_gsheet(service, sheet_id, log_data):
         }
         result = service.spreadsheets().values().append(
             spreadsheetId=sheet_id,
-            range=range_name,
+            range=f"{LOG_SHEET_NAME}!A1", # Append akan mencari baris kosong pertama
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body=body).execute()
+        # st.success(f"Proposal berhasil dicatat ke Google Sheet.") # Kurangi pesan sukses
         return True
     except HttpError as error:
         st.error(f"Error saat mencatat ke Google Sheet: {error}. Pastikan Service Account memiliki akses Editor.")
@@ -358,18 +346,18 @@ if credentials_info and google_sheet_id_secret:
 with st.sidebar:
     st.header("⚙️ Input Data")
 
-    # Informasi Konsultan
-    st.subheader("Informasi Konsultan")
-    agent_name = st.text_input("Nama Konsultan", "")
-    agent_email = st.text_input("Email Konsultan", "")
-    agent_phone = st.text_input("No. HP/WA Konsultan", "")
+    # Informasi Agent/Marketing
+    st.subheader("Informasi Agent/Marketing")
+    agent_name = st.text_input("Nama Agent/Marketing", "")
+    agent_email = st.text_input("Email Agent/Marketing", "")
+    agent_phone = st.text_input("No. HP/WA Agent/Marketing", "")
 
     # Informasi Proposal & Prospek
-    st.subheader("Informasi Proposal & Pialang")
+    st.subheader("Informasi Proposal & Prospek")
     # Tampilkan nomor proposal tapi disable inputnya
     st.text_input("Nomor Proposal (Otomatis)", value=next_proposal_num, disabled=True)
-    prospect_name = st.text_input("Nama Pialang (Broker Forex)", "PT Contoh Broker")
-    prospect_location = st.text_input("Lokasi Pialang", "Jakarta")
+    prospect_name = st.text_input("Nama Prospek (Broker Forex)", "PT Contoh Broker")
+    prospect_location = st.text_input("Lokasi Prospek", "Jakarta")
 
     # Metrik Operasional
     st.subheader("Metrik Operasional Saat Ini")
@@ -424,7 +412,7 @@ if calculate_button:
 
     # Validasi input dasar
     if not agent_name or not agent_email or not agent_phone:
-        st.sidebar.error("Harap isi semua informasi Konsultan.")
+        st.sidebar.error("Harap isi semua informasi Agent/Marketing.")
         st.stop()
     if not prospect_name:
         st.sidebar.error("Harap isi Nama Prospek.")
