@@ -2,7 +2,7 @@
 """
 Modifikasi skrip ROI Calculator untuk dijalankan di Streamlit,
 menambahkan input administrasi, menghasilkan output PDF, mengunggah ke Google Drive,
-menggunakan Streamlit Secrets, dan mencatat ke Google Sheets.
+menggunakan Streamlit Secrets (termasuk Base64), dan mencatat ke Google Sheets.
 """
 import streamlit as st
 import pandas as pd
@@ -98,32 +98,56 @@ SCOPES_DRIVE = ['https://www.googleapis.com/auth/drive']
 SCOPES_SHEETS = ['https://www.googleapis.com/auth/spreadsheets']
 
 def get_google_credentials(secrets):
-    """Mendapatkan kredensial Service Account dari Streamlit Secrets atau file upload."""
+    """Mendapatkan kredensial Service Account dari Streamlit Secrets (Base64 atau JSON) atau file upload."""
     credentials_info = None
     source = "Not Found"
 
-    # Coba dari Streamlit Secrets dulu
-    if 'google_service_account' in secrets:
+    # Prioritas 1: Coba dari Secret Base64 (misal, google_service_account_b64)
+    if 'google_service_account_b64' in secrets:
         try:
-            # Cek apakah secret adalah string JSON atau dictionary/toml
+            b64_str = secrets['google_service_account_b64']
+            if isinstance(b64_str, str) and b64_str:
+                decoded_bytes = base64.b64decode(b64_str)
+                decoded_str = decoded_bytes.decode('utf-8')
+                credentials_info = json.loads(decoded_str)
+                source = "Streamlit Secrets (Base64)"
+                st.sidebar.success("Kredensial Service Account ditemukan di Secrets (Base64).")
+            else:
+                st.sidebar.warning("Secret 'google_service_account_b64' ditemukan tapi kosong atau bukan string.")
+        except base64.binascii.Error:
+            st.sidebar.error("Gagal decode Base64 dari secret 'google_service_account_b64'. Pastikan string Base64 valid.")
+            return None, "Error"
+        except json.JSONDecodeError:
+            st.sidebar.error("Gagal parse JSON setelah decode Base64 dari secret 'google_service_account_b64'.")
+            return None, "Error"
+        except Exception as e:
+            st.sidebar.error(f"Error membaca secret Base64 'google_service_account_b64': {e}")
+            return None, "Error"
+
+    # Prioritas 2: Coba dari Secret JSON/TOML biasa (misal, google_service_account)
+    if credentials_info is None and 'google_service_account' in secrets:
+        try:
             secret_content = secrets['google_service_account']
             if isinstance(secret_content, str):
                 credentials_info = json.loads(secret_content)
             elif isinstance(secret_content, dict) or isinstance(secret_content, toml.TomlDecoder):
                  credentials_info = dict(secret_content)
             else:
-                 st.sidebar.error("Format secret 'google_service_account' tidak dikenali (harus string JSON atau TOML).")
-                 return None, "Error"
-            source = "Streamlit Secrets"
-            st.sidebar.success("Kredensial Service Account ditemukan di Streamlit Secrets.")
-        except json.JSONDecodeError:
-            st.sidebar.error("Gagal membaca secret 'google_service_account' sebagai JSON.")
-            return None, "Error"
-        except Exception as e:
-            st.sidebar.error(f"Error membaca secret 'google_service_account': {e}")
-            return None, "Error"
+                 st.sidebar.warning("Format secret 'google_service_account' tidak dikenali (harus string JSON atau TOML).")
+                 # Jangan return error, biarkan fallback ke file upload
 
-    # Jika tidak ada di secrets, tampilkan opsi upload
+            if credentials_info: # Hanya jika berhasil di-parse
+                source = "Streamlit Secrets (JSON/TOML)"
+                st.sidebar.success("Kredensial Service Account ditemukan di Secrets (JSON/TOML).")
+
+        except json.JSONDecodeError:
+            st.sidebar.warning("Gagal membaca secret 'google_service_account' sebagai JSON/TOML. Mencoba file upload...")
+            # Jangan return error, biarkan fallback ke file upload
+        except Exception as e:
+            st.sidebar.warning(f"Error membaca secret 'google_service_account': {e}. Mencoba file upload...")
+            # Jangan return error, biarkan fallback ke file upload
+
+    # Prioritas 3: Fallback ke File Upload
     if credentials_info is None:
         uploaded_key_file = st.sidebar.file_uploader("Unggah File Kunci JSON Service Account", type=['json'], help="Jika tidak menggunakan Streamlit Secrets. Unduh dari Google Cloud Console (IAM & Admin > Service Accounts > Keys > Add Key > Create new key > JSON).")
         if uploaded_key_file is not None:
@@ -139,7 +163,7 @@ def get_google_credentials(secrets):
                 st.sidebar.error(f"Error membaca file kunci: {e}")
                 return None, "Error"
 
-    # Validasi format kredensial jika ditemukan
+    # Validasi format kredensial jika ditemukan dari sumber manapun
     if credentials_info:
         required_keys = ("type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri")
         if not all(k in credentials_info for k in required_keys):
@@ -147,6 +171,9 @@ def get_google_credentials(secrets):
             return None, "Error"
         return credentials_info, source
     else:
+        # Jika tidak ada secret dan tidak ada file diupload
+        if source == "Not Found":
+             st.sidebar.info("Kredensial Google Service Account tidak ditemukan di Secrets atau file upload.")
         return None, "Not Found"
 
 def get_gdrive_service(credentials_info):
@@ -271,22 +298,22 @@ with st.sidebar:
     # Coba baca dari secrets
     secrets = st.secrets
     gdrive_parent_folder_id_secret = secrets.get("gdrive_parent_folder_id")
-    # google_sheet_id_secret = secrets.get("google_sheet_id") # Akan digunakan nanti
+    google_sheet_id_secret = secrets.get("google_sheet_id") # Baca ID Sheet dari secrets
     credentials_info, cred_source = get_google_credentials(secrets)
 
     # Tampilkan input ID Folder hanya jika tidak ada di secrets
     gdrive_parent_folder_id_input = None
     if not gdrive_parent_folder_id_secret:
         gdrive_parent_folder_id_input = st.text_input("ID Folder Induk Google Drive", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
-    else:
+    elif cred_source != "Error": # Hanya tampilkan success jika kredensial juga OK
         st.success("ID Folder Induk GDrive ditemukan di Streamlit Secrets.")
 
-    # Tampilkan input ID Sheet hanya jika tidak ada di secrets (akan ditambahkan nanti)
-    # google_sheet_id_input = None
-    # if not google_sheet_id_secret:
-    #     google_sheet_id_input = st.text_input("ID Google Sheet (untuk Log)", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
-    # else:
-    #     st.success("ID Google Sheet ditemukan di Streamlit Secrets.")
+    # Tampilkan input ID Sheet hanya jika tidak ada di secrets
+    google_sheet_id_input = None
+    if not google_sheet_id_secret:
+        google_sheet_id_input = st.text_input("ID Google Sheet (untuk Log)", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
+    elif cred_source != "Error": # Hanya tampilkan success jika kredensial juga OK
+        st.success("ID Google Sheet ditemukan di Streamlit Secrets.")
 
     # Tombol Kalkulasi
     calculate_button = st.button("🚀 Hitung ROI, Buat PDF & Unggah")
@@ -295,8 +322,8 @@ with st.sidebar:
 if calculate_button:
     # Tentukan ID Folder yang akan digunakan (prioritaskan secrets)
     gdrive_parent_folder_id = gdrive_parent_folder_id_secret or gdrive_parent_folder_id_input
-    # Tentukan ID Sheet yang akan digunakan (akan ditambahkan nanti)
-    # google_sheet_id = google_sheet_id_secret or google_sheet_id_input
+    # Tentukan ID Sheet yang akan digunakan (prioritaskan secrets)
+    google_sheet_id = google_sheet_id_secret or google_sheet_id_input
 
     # Validasi input dasar
     if not agent_name or not agent_email or not agent_phone:
@@ -306,9 +333,9 @@ if calculate_button:
         st.sidebar.error("Harap isi Nama Prospek.")
         st.stop()
 
-    # Validasi Kredensial dan ID Folder jika diperlukan upload/log
+    # Validasi Kredensial dan ID jika diperlukan upload/log
     trigger_gdrive_upload = False
-    # trigger_gsheet_log = False # Akan digunakan nanti
+    trigger_gsheet_log = False # Akan digunakan nanti
 
     if credentials_info and gdrive_parent_folder_id:
         trigger_gdrive_upload = True
@@ -318,10 +345,10 @@ if calculate_button:
          st.warning("ID Folder Induk Google Drive tidak ditemukan. PDF tidak akan diunggah.")
 
     # Validasi ID Sheet (akan ditambahkan nanti)
-    # if credentials_info and google_sheet_id:
-    #     trigger_gsheet_log = True
-    # elif not google_sheet_id:
-    #     st.warning("ID Google Sheet tidak ditemukan. Proposal tidak akan dicatat.")
+    if credentials_info and google_sheet_id:
+        trigger_gsheet_log = True
+    elif not google_sheet_id:
+        st.warning("ID Google Sheet tidak ditemukan. Proposal tidak akan dicatat.")
 
     st.header("📈 Hasil Analisis ROI")
     with st.spinner("Melakukan kalkulasi ROI..."):
