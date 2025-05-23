@@ -29,7 +29,7 @@ from googleapiclient.errors import HttpError
 st.set_page_config(layout="wide", page_title="Kalkulator ROI AI Voice Broker")
 
 # --- Konfigurasi Awal Lainnya ---
-PROVIDER_COMPANY_NAME = "MEDIA AI SOLUSI, group of PT. EKUITAS MEDIA INVESTAMA"
+PROVIDER_COMPANY_NAME = "MEDIA SOLUSI AI, group of PT. EKUITAS MEDIA INVESTAMA"
 LOG_SHEET_NAME = "Log Proposal" # Nama sheet/tab di dalam Google Sheet
 
 # Set locale ke Indonesian (Hapus warning jika gagal)
@@ -346,18 +346,18 @@ if credentials_info and google_sheet_id_secret:
 with st.sidebar:
     st.header("⚙️ Input Data")
 
-    # Informasi Agent/Marketing
-    st.subheader("Informasi Agent/Marketing")
-    agent_name = st.text_input("Nama Agent/Marketing", "")
-    agent_email = st.text_input("Email Agent/Marketing", "")
-    agent_phone = st.text_input("No. HP/WA Agent/Marketing", "")
+    # Informasi Konsultan
+    st.subheader("Informasi Konsultan")
+    agent_name = st.text_input("Nama Konsultan", "")
+    agent_email = st.text_input("Email Konsultan", "")
+    agent_phone = st.text_input("No. HP/WA Konsultan", "")
 
     # Informasi Proposal & Prospek
-    st.subheader("Informasi Proposal & Prospek")
+    st.subheader("Informasi Proposal & Pialang")
     # Tampilkan nomor proposal tapi disable inputnya
     st.text_input("Nomor Proposal (Otomatis)", value=next_proposal_num, disabled=True)
-    prospect_name = st.text_input("Nama Prospek (Broker Forex)", "PT Contoh Broker")
-    prospect_location = st.text_input("Lokasi Prospek", "Jakarta")
+    prospect_name = st.text_input("Nama Pialang (Broker Forex)", "PT Contoh Broker")
+    prospect_location = st.text_input("Lokasi Pialang", "Jakarta")
 
     # Metrik Operasional
     st.subheader("Metrik Operasional Saat Ini")
@@ -412,7 +412,7 @@ if calculate_button:
 
     # Validasi input dasar
     if not agent_name or not agent_email or not agent_phone:
-        st.sidebar.error("Harap isi semua informasi Agent/Marketing.")
+        st.sidebar.error("Harap isi semua informasi Konsultan.")
         st.stop()
     if not prospect_name:
         st.sidebar.error("Harap isi Nama Prospek.")
