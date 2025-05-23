@@ -29,7 +29,7 @@ from googleapiclient.errors import HttpError
 st.set_page_config(layout="wide", page_title="Kalkulator ROI AI Voice Broker")
 
 # --- Konfigurasi Awal Lainnya ---
-PROVIDER_COMPANY_NAME = "MEDIA AI SOLUSI, group of PT. EKUITAS MEDIA INVESTAMA"
+PROVIDER_COMPANY_NAME = "MEDIA SOLUSI AI, group of PT. EKUITAS MEDIA INVESTAMA"
 
 # Set locale ke Indonesian
 try:
@@ -249,23 +249,23 @@ def upload_to_drive(service, pdf_bytes, filename, prospect_folder_id):
 
 # --- Judul dan Deskripsi Aplikasi ---
 st.title("📊 Kalkulator ROI Solusi AI Voice untuk Broker Forex")
-st.markdown("Masukkan data operasional dan asumsi untuk menghitung potensi ROI, lalu hasilkan proposal PDF dan simpan ke Google Drive.")
+st.markdown("Masukkan data operasional dan asumsi untuk menghitung potensi ROI, lalu unduh proposal.")
 
 # --- Input Data --- 
 with st.sidebar:
     st.header("⚙️ Input Data")
 
-    # Informasi Agent/Marketing (BARU)
-    st.subheader("Informasi Agent/Marketing")
-    agent_name = st.text_input("Nama Agent/Marketing", "")
-    agent_email = st.text_input("Email Agent/Marketing", "")
-    agent_phone = st.text_input("No. HP/WA Agent/Marketing", "")
+    # Informasi Konsultan (BARU)
+    st.subheader("Informasi Konsultan")
+    agent_name = st.text_input("Nama Konsultan", "")
+    agent_email = st.text_input("Email Konsultan", "")
+    agent_phone = st.text_input("No. HP/WA Konsultan", "")
 
     # Informasi Proposal & Prospek
     st.subheader("Informasi Proposal & Prospek")
     proposal_number = st.text_input("Nomor Proposal", "PROP-" + datetime.now().strftime("%y%m%d") + "-001")
-    prospect_name = st.text_input("Nama Prospek (Broker Forex)", "PT Contoh Broker")
-    prospect_location = st.text_input("Lokasi Prospek", "Jakarta")
+    prospect_name = st.text_input("Nama Pialang  (Broker Forex)", "PT Contoh Broker")
+    prospect_location = st.text_input("Lokasi Pialang ", "Jakarta")
     # provider_company_name tidak perlu input lagi, sudah fix
     # creator_name digantikan oleh agent_name
 
@@ -327,10 +327,10 @@ if calculate_button:
 
     # Validasi input dasar
     if not agent_name or not agent_email or not agent_phone:
-        st.sidebar.error("Harap isi semua informasi Agent/Marketing.")
+        st.sidebar.error("Harap isi semua informasi Konsultan.")
         st.stop()
     if not prospect_name:
-        st.sidebar.error("Harap isi Nama Prospek.")
+        st.sidebar.error("Harap isi Nama Pialang .")
         st.stop()
 
     # Validasi Kredensial dan ID jika diperlukan upload/log
