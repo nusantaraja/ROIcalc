@@ -2,7 +2,8 @@
 """
 Modifikasi skrip ROI Calculator untuk dijalankan di Streamlit,
 menambahkan input administrasi, menghasilkan output PDF, mengunggah ke Google Drive,
-menggunakan Streamlit Secrets (termasuk Base64), dan mencatat ke Google Sheets.
+menggunakan Streamlit Secrets (termasuk Base64), mencatat ke Google Sheets,
+dan nomor proposal otomatis.
 """
 import streamlit as st
 import pandas as pd
@@ -23,22 +24,23 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from googleapiclient.errors import HttpError
-# (Google Sheets library akan diimpor nanti saat fungsi logging ditambahkan)
 
 # --- Konfigurasi Halaman Streamlit (Harus menjadi perintah st pertama) ---
 st.set_page_config(layout="wide", page_title="Kalkulator ROI AI Voice Broker")
 
 # --- Konfigurasi Awal Lainnya ---
-PROVIDER_COMPANY_NAME = "MEDIA SOLUSI AI, group of PT. EKUITAS MEDIA INVESTAMA"
+PROVIDER_COMPANY_NAME = "MEDIA AI SOLUSI, group of PT. EKUITAS MEDIA INVESTAMA"
+LOG_SHEET_NAME = "Log Proposal" # Nama sheet/tab di dalam Google Sheet
 
-# Set locale ke Indonesian
+# Set locale ke Indonesian (Hapus warning jika gagal)
 try:
     locale.setlocale(locale.LC_ALL, 'id_ID.UTF-8')
 except locale.Error:
     try:
         locale.setlocale(locale.LC_ALL, 'id_ID')
     except locale.Error:
-        st.sidebar.warning("Locale Indonesia tidak ditemukan. Format angka mungkin tidak sesuai.")
+        # st.sidebar.warning("Locale Indonesia tidak ditemukan. Format angka mungkin tidak sesuai.") # Dihapus sesuai permintaan
+        pass # Abaikan jika locale tidak bisa diset
 
 # --- Fungsi Bantuan ---
 def format_number_id(value, precision=2):
@@ -88,19 +90,17 @@ def generate_pdf(data):
         return pdf_bytes
     except Exception as e:
         st.error(f"Error saat membuat PDF: {e}")
-        # import traceback
-        # st.error(traceback.format_exc())
         return None
 
 # --- Fungsi Google Drive & Sheets (Auth terpusat) ---
 
-SCOPES_DRIVE = ['https://www.googleapis.com/auth/drive']
-SCOPES_SHEETS = ['https://www.googleapis.com/auth/spreadsheets']
+SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
 
 def get_google_credentials(secrets):
     """Mendapatkan kredensial Service Account dari Streamlit Secrets (Base64 atau JSON) atau file upload."""
     credentials_info = None
     source = "Not Found"
+    show_api_settings = True # Default tampilkan pengaturan jika ada masalah
 
     # Prioritas 1: Coba dari Secret Base64 (misal, google_service_account_b64)
     if 'google_service_account_b64' in secrets:
@@ -111,18 +111,19 @@ def get_google_credentials(secrets):
                 decoded_str = decoded_bytes.decode('utf-8')
                 credentials_info = json.loads(decoded_str)
                 source = "Streamlit Secrets (Base64)"
-                st.sidebar.success("Kredensial Service Account ditemukan di Secrets (Base64).")
+                # st.sidebar.success("Kredensial Service Account ditemukan di Secrets (Base64).") # Kurangi pesan sukses
+                show_api_settings = False # Sembunyikan jika sukses dari secrets
             else:
                 st.sidebar.warning("Secret 'google_service_account_b64' ditemukan tapi kosong atau bukan string.")
         except base64.binascii.Error:
             st.sidebar.error("Gagal decode Base64 dari secret 'google_service_account_b64'. Pastikan string Base64 valid.")
-            return None, "Error"
+            return None, "Error", show_api_settings
         except json.JSONDecodeError:
             st.sidebar.error("Gagal parse JSON setelah decode Base64 dari secret 'google_service_account_b64'.")
-            return None, "Error"
+            return None, "Error", show_api_settings
         except Exception as e:
             st.sidebar.error(f"Error membaca secret Base64 'google_service_account_b64': {e}")
-            return None, "Error"
+            return None, "Error", show_api_settings
 
     # Prioritas 2: Coba dari Secret JSON/TOML biasa (misal, google_service_account)
     if credentials_info is None and 'google_service_account' in secrets:
@@ -134,52 +135,51 @@ def get_google_credentials(secrets):
                  credentials_info = dict(secret_content)
             else:
                  st.sidebar.warning("Format secret 'google_service_account' tidak dikenali (harus string JSON atau TOML).")
-                 # Jangan return error, biarkan fallback ke file upload
 
             if credentials_info: # Hanya jika berhasil di-parse
                 source = "Streamlit Secrets (JSON/TOML)"
-                st.sidebar.success("Kredensial Service Account ditemukan di Secrets (JSON/TOML).")
+                # st.sidebar.success("Kredensial Service Account ditemukan di Secrets (JSON/TOML).") # Kurangi pesan sukses
+                show_api_settings = False # Sembunyikan jika sukses dari secrets
 
         except json.JSONDecodeError:
             st.sidebar.warning("Gagal membaca secret 'google_service_account' sebagai JSON/TOML. Mencoba file upload...")
-            # Jangan return error, biarkan fallback ke file upload
         except Exception as e:
             st.sidebar.warning(f"Error membaca secret 'google_service_account': {e}. Mencoba file upload...")
-            # Jangan return error, biarkan fallback ke file upload
 
     # Prioritas 3: Fallback ke File Upload
     if credentials_info is None:
-        uploaded_key_file = st.sidebar.file_uploader("Unggah File Kunci JSON Service Account", type=['json'], help="Jika tidak menggunakan Streamlit Secrets. Unduh dari Google Cloud Console (IAM & Admin > Service Accounts > Keys > Add Key > Create new key > JSON).")
+        uploaded_key_file = st.sidebar.file_uploader("Unggah File Kunci JSON Service Account", type=['json'], help="Jika tidak menggunakan Streamlit Secrets. Unduh dari Google Cloud Console.")
         if uploaded_key_file is not None:
             try:
                 stringio = io.StringIO(uploaded_key_file.getvalue().decode("utf-8"))
                 credentials_info = json.load(stringio)
                 source = "File Upload"
                 st.sidebar.success("File kunci JSON berhasil dibaca.")
+                show_api_settings = True # Tetap tampilkan jika via upload
             except json.JSONDecodeError:
                 st.sidebar.error("File kunci JSON tidak valid.")
-                return None, "Error"
+                return None, "Error", True
             except Exception as e:
                 st.sidebar.error(f"Error membaca file kunci: {e}")
-                return None, "Error"
+                return None, "Error", True
 
     # Validasi format kredensial jika ditemukan dari sumber manapun
     if credentials_info:
         required_keys = ("type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri")
         if not all(k in credentials_info for k in required_keys):
             st.sidebar.error(f"Format kredensial dari '{source}' tidak lengkap. Pastikan file/secret JSON Service Account yang benar digunakan.")
-            return None, "Error"
-        return credentials_info, source
+            return None, "Error", True
+        return credentials_info, source, show_api_settings
     else:
         # Jika tidak ada secret dan tidak ada file diupload
         if source == "Not Found":
-             st.sidebar.info("Kredensial Google Service Account tidak ditemukan di Secrets atau file upload.")
-        return None, "Not Found"
+             st.sidebar.info("Kredensial Google Service Account tidak ditemukan.")
+        return None, "Not Found", True
 
 def get_gdrive_service(credentials_info):
     """Membuat service Google Drive."""
     try:
-        credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES_DRIVE)
+        credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
         service = build('drive', 'v3', credentials=credentials)
         return service
     except ValueError as ve:
@@ -189,9 +189,85 @@ def get_gdrive_service(credentials_info):
         st.error(f"Gagal membuat service Google Drive: {e}")
         return None
 
-# Fungsi Google Sheets akan ditambahkan di sini nanti
-# def get_gsheets_service(credentials_info): ...
-# def log_to_gsheet(service, sheet_id, data): ...
+def get_gsheets_service(credentials_info):
+    """Membuat service Google Sheets."""
+    try:
+        credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
+        service = build('sheets', 'v4', credentials=credentials)
+        return service
+    except ValueError as ve:
+        st.error(f"Error memproses kredensial untuk Google Sheets: {ve}.")
+        return None
+    except Exception as e:
+        st.error(f"Gagal membuat service Google Sheets: {e}")
+        return None
+
+def get_next_proposal_number(service, sheet_id):
+    """Mendapatkan nomor proposal berikutnya dari Google Sheet."""
+    try:
+        # Asumsi: Kolom B (indeks 1) berisi nomor proposal
+        # Asumsi: Data dimulai dari baris 2 (baris 1 header)
+        # Baca kolom B saja untuk efisiensi
+        range_name = f"{LOG_SHEET_NAME}!B2:B"
+        result = service.spreadsheets().values().get(spreadsheetId=sheet_id, range=range_name).execute()
+        values = result.get('values', [])
+
+        today_prefix = "PROP-" + datetime.now().strftime("%y%m%d") + "-"
+        last_number = 0
+
+        if values:
+            # Cari nomor terakhir untuk tanggal hari ini
+            for row in reversed(values):
+                if row and row[0].startswith(today_prefix):
+                    try:
+                        last_number = int(row[0].split('-')[-1])
+                        break
+                    except (IndexError, ValueError):
+                        continue # Abaikan format yang salah
+
+        next_number = last_number + 1
+        return f"{today_prefix}{next_number:03d}"
+
+    except HttpError as error:
+        st.warning(f"Error saat membaca Google Sheet untuk nomor proposal: {error}. Menggunakan format default.")
+        return "PROP-" + datetime.now().strftime("%y%m%d") + "-001"
+    except Exception as e:
+        st.warning(f"Error tidak terduga saat mendapatkan nomor proposal: {e}. Menggunakan format default.")
+        return "PROP-" + datetime.now().strftime("%y%m%d") + "-001"
+
+def log_to_gsheet(service, sheet_id, log_data):
+    """Mencatat data proposal ke Google Sheet."""
+    try:
+        # Asumsi urutan kolom: Timestamp, Proposal No, Agent Name, Agent Email, Agent Phone, Prospect Name, Prospect Location, GDrive Link
+        values = [
+            [
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                log_data.get('proposal_number', ''),
+                log_data.get('agent_name', ''),
+                log_data.get('agent_email', ''),
+                log_data.get('agent_phone', ''),
+                log_data.get('prospect_name', ''),
+                log_data.get('prospect_location', ''),
+                log_data.get('gdrive_link', '')
+            ]
+        ]
+        body = {
+            'values': values
+        }
+        result = service.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=f"{LOG_SHEET_NAME}!A1", # Append akan mencari baris kosong pertama
+            valueInputOption="USER_ENTERED",
+            insertDataOption="INSERT_ROWS",
+            body=body).execute()
+        # st.success(f"Proposal berhasil dicatat ke Google Sheet.") # Kurangi pesan sukses
+        return True
+    except HttpError as error:
+        st.error(f"Error saat mencatat ke Google Sheet: {error}. Pastikan Service Account memiliki akses Editor.")
+        return False
+    except Exception as e:
+        st.error(f"Error tidak terduga saat mencatat ke Google Sheet: {e}")
+        return False
 
 def find_or_create_folder(service, folder_name, parent_folder_id):
     """Mencari/membuat folder di Google Drive."""
@@ -220,7 +296,7 @@ def find_or_create_folder(service, folder_name, parent_folder_id):
 
 def upload_to_drive(service, pdf_bytes, filename, prospect_folder_id):
     """Mengunggah file PDF ke Google Drive."""
-    # (Kode fungsi ini tetap sama, mungkin tambahkan penanganan error lebih baik)
+    # (Kode fungsi ini tetap sama)
     gdrive_link = None
     file_id = None
     try:
@@ -249,27 +325,41 @@ def upload_to_drive(service, pdf_bytes, filename, prospect_folder_id):
 
 # --- Judul dan Deskripsi Aplikasi ---
 st.title("📊 Kalkulator ROI Solusi AI Voice untuk Broker Forex")
-st.markdown("Masukkan data operasional dan asumsi untuk menghitung potensi ROI, lalu unduh proposal.")
+st.markdown("Masukkan data operasional dan asumsi untuk menghitung potensi ROI, lalu hasilkan proposal PDF dan simpan ke Google Drive.")
+
+# --- Dapatkan Kredensial & ID dari Secrets --- 
+secrets = st.secrets
+credentials_info, cred_source, show_api_settings_sidebar = get_google_credentials(secrets)
+gdrive_parent_folder_id_secret = secrets.get("gdrive_parent_folder_id")
+google_sheet_id_secret = secrets.get("google_sheet_id")
+
+# --- Dapatkan Nomor Proposal Berikutnya (jika memungkinkan) ---
+next_proposal_num = "PROP-" + datetime.now().strftime("%y%m%d") + "-XXX"
+if credentials_info and google_sheet_id_secret:
+    gsheets_service = get_gsheets_service(credentials_info)
+    if gsheets_service:
+        next_proposal_num = get_next_proposal_number(gsheets_service, google_sheet_id_secret)
+    else:
+        st.sidebar.warning("Gagal terhubung ke Google Sheets untuk mendapatkan nomor proposal.")
 
 # --- Input Data --- 
 with st.sidebar:
     st.header("⚙️ Input Data")
 
-    # Informasi Konsultan (BARU)
-    st.subheader("Informasi Konsultan")
-    agent_name = st.text_input("Nama Konsultan", "")
-    agent_email = st.text_input("Email Konsultan", "")
-    agent_phone = st.text_input("No. HP/WA Konsultan", "")
+    # Informasi Agent/Marketing
+    st.subheader("Informasi Agent/Marketing")
+    agent_name = st.text_input("Nama Agent/Marketing", "")
+    agent_email = st.text_input("Email Agent/Marketing", "")
+    agent_phone = st.text_input("No. HP/WA Agent/Marketing", "")
 
     # Informasi Proposal & Prospek
     st.subheader("Informasi Proposal & Prospek")
-    proposal_number = st.text_input("Nomor Proposal", "PROP-" + datetime.now().strftime("%y%m%d") + "-001")
-    prospect_name = st.text_input("Nama Pialang  (Broker Forex)", "PT Contoh Broker")
-    prospect_location = st.text_input("Lokasi Pialang ", "Jakarta")
-    # provider_company_name tidak perlu input lagi, sudah fix
-    # creator_name digantikan oleh agent_name
+    # Tampilkan nomor proposal tapi disable inputnya
+    st.text_input("Nomor Proposal (Otomatis)", value=next_proposal_num, disabled=True)
+    prospect_name = st.text_input("Nama Prospek (Broker Forex)", "PT Contoh Broker")
+    prospect_location = st.text_input("Lokasi Prospek", "Jakarta")
 
-    # Metrik Operasional (sama seperti sebelumnya)
+    # Metrik Operasional
     st.subheader("Metrik Operasional Saat Ini")
     cs_staff = st.number_input("Jumlah staf CS", min_value=1, value=10)
     avg_monthly_salary = st.number_input("Gaji bulanan/staf (IDR)", min_value=0, value=7000000, step=100000, format="%d")
@@ -281,74 +371,72 @@ with st.sidebar:
     avg_monthly_client_value = st.number_input("Pendapatan/klien/bulan (USD)", min_value=0.0, value=50.0, step=5.0)
     current_retention_rate = st.number_input("Loyalitas klien tahunan (%) ", min_value=0.0, max_value=100.0, value=85.0, step=1.0)
 
-    # Investasi Solusi AI Voice (sama seperti sebelumnya)
+    # Investasi Solusi AI Voice
     st.subheader("Investasi Solusi AI Voice")
     implementation_cost = st.number_input("Biaya implementasi (USD)", min_value=0.0, value=10000.0, step=1000.0)
     annual_subscription = st.number_input("Biaya langganan tahunan (USD)", min_value=0.0, value=5000.0, step=500.0)
 
-    # Asumsi Dampak (sama seperti sebelumnya)
+    # Asumsi Dampak
     st.subheader("Asumsi Dampak Solusi AI Voice")
     automation_rate = st.slider("Otomatisasi pertanyaan (%) ", 0, 100, 75)
     staff_reduction = st.slider("Pengurangan staf CS (%) ", 0, 100, 35)
     retention_improvement = st.slider("Peningkatan loyalitas klien (%) ", 0.0, 20.0, 7.5, 0.5)
     handling_time_improvement = st.slider("Peningkatan waktu penanganan (%) ", 0, 100, 25)
 
-    # --- Pengaturan Google Drive & Sheets (Menggunakan Secrets) ---
-    st.subheader("☁️ Pengaturan Google API")
-    # Coba baca dari secrets
-    secrets = st.secrets
-    gdrive_parent_folder_id_secret = secrets.get("gdrive_parent_folder_id")
-    google_sheet_id_secret = secrets.get("google_sheet_id") # Baca ID Sheet dari secrets
-    credentials_info, cred_source = get_google_credentials(secrets)
-
-    # Tampilkan input ID Folder hanya jika tidak ada di secrets
+    # --- Pengaturan Google API (Hanya tampil jika perlu) ---
     gdrive_parent_folder_id_input = None
-    if not gdrive_parent_folder_id_secret:
-        gdrive_parent_folder_id_input = st.text_input("ID Folder Induk Google Drive", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
-    elif cred_source != "Error": # Hanya tampilkan success jika kredensial juga OK
-        st.success("ID Folder Induk GDrive ditemukan di Streamlit Secrets.")
-
-    # Tampilkan input ID Sheet hanya jika tidak ada di secrets
     google_sheet_id_input = None
-    if not google_sheet_id_secret:
-        google_sheet_id_input = st.text_input("ID Google Sheet (untuk Log)", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
-    elif cred_source != "Error": # Hanya tampilkan success jika kredensial juga OK
-        st.success("ID Google Sheet ditemukan di Streamlit Secrets.")
+    if show_api_settings_sidebar:
+        st.subheader("☁️ Pengaturan Google API (Manual)")
+        # Tampilkan input ID Folder hanya jika tidak ada di secrets
+        if not gdrive_parent_folder_id_secret:
+            gdrive_parent_folder_id_input = st.text_input("ID Folder Induk Google Drive", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
+        else:
+            st.info("ID Folder Induk GDrive ditemukan di Streamlit Secrets.")
+        # Tampilkan input ID Sheet hanya jika tidak ada di secrets
+        if not google_sheet_id_secret:
+            google_sheet_id_input = st.text_input("ID Google Sheet (untuk Log)", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
+        else:
+            st.info("ID Google Sheet ditemukan di Streamlit Secrets.")
+        # Opsi upload kredensial sudah ditangani di get_google_credentials
 
     # Tombol Kalkulasi
+    st.divider()
     calculate_button = st.button("🚀 Hitung ROI, Buat PDF & Unggah")
 
 # --- Kalkulasi & Output --- 
 if calculate_button:
-    # Tentukan ID Folder yang akan digunakan (prioritaskan secrets)
+    # Tentukan ID Folder & Sheet yang akan digunakan (prioritaskan secrets)
     gdrive_parent_folder_id = gdrive_parent_folder_id_secret or gdrive_parent_folder_id_input
-    # Tentukan ID Sheet yang akan digunakan (prioritaskan secrets)
     google_sheet_id = google_sheet_id_secret or google_sheet_id_input
 
     # Validasi input dasar
     if not agent_name or not agent_email or not agent_phone:
-        st.sidebar.error("Harap isi semua informasi Konsultan.")
+        st.sidebar.error("Harap isi semua informasi Agent/Marketing.")
         st.stop()
     if not prospect_name:
-        st.sidebar.error("Harap isi Nama Pialang .")
+        st.sidebar.error("Harap isi Nama Prospek.")
         st.stop()
 
     # Validasi Kredensial dan ID jika diperlukan upload/log
     trigger_gdrive_upload = False
-    trigger_gsheet_log = False # Akan digunakan nanti
+    trigger_gsheet_log = False
+    show_upload_log_section = False # Flag untuk menampilkan section di area utama
 
-    if credentials_info and gdrive_parent_folder_id:
-        trigger_gdrive_upload = True
-    elif not credentials_info and cred_source != "Error":
-        st.warning("Kredensial Google tidak ditemukan. PDF tidak akan diunggah ke Google Drive atau dicatat ke Google Sheet.")
-    elif not gdrive_parent_folder_id:
-         st.warning("ID Folder Induk Google Drive tidak ditemukan. PDF tidak akan diunggah.")
+    if credentials_info:
+        if gdrive_parent_folder_id:
+            trigger_gdrive_upload = True
+            show_upload_log_section = True
+        else:
+            st.warning("ID Folder Induk Google Drive tidak ditemukan. PDF tidak akan diunggah.")
 
-    # Validasi ID Sheet (akan ditambahkan nanti)
-    if credentials_info and google_sheet_id:
-        trigger_gsheet_log = True
-    elif not google_sheet_id:
-        st.warning("ID Google Sheet tidak ditemukan. Proposal tidak akan dicatat.")
+        if google_sheet_id:
+            trigger_gsheet_log = True
+            show_upload_log_section = True
+        else:
+            st.warning("ID Google Sheet tidak ditemukan. Proposal tidak akan dicatat.")
+    elif cred_source != "Error":
+        st.warning("Kredensial Google tidak ditemukan. PDF tidak akan diunggah atau dicatat.")
 
     st.header("📈 Hasil Analisis ROI")
     with st.spinner("Melakukan kalkulasi ROI..."):
@@ -477,15 +565,17 @@ if calculate_button:
 
     # --- Persiapan Data untuk PDF & Log ---
     current_time = datetime.now()
+    # Gunakan nomor proposal yang didapat dari GSheet atau default
+    final_proposal_number = next_proposal_num
     pdf_data = {
-        'proposal_number': proposal_number,
+        'proposal_number': final_proposal_number,
         'analysis_date': current_time.strftime('%d %B %Y'),
         'prospect_name': prospect_name,
         'prospect_location': prospect_location,
-        'provider_company_name': PROVIDER_COMPANY_NAME, # Gunakan konstanta
-        'agent_name': agent_name, # BARU
-        'agent_email': agent_email, # BARU
-        'agent_phone': agent_phone, # BARU
+        'provider_company_name': PROVIDER_COMPANY_NAME,
+        'agent_name': agent_name,
+        'agent_email': agent_email,
+        'agent_phone': agent_phone,
         # Data kalkulasi lainnya (sama seperti sebelumnya)
         'cs_staff': cs_staff,
         'current_annual_labor_cost_idr': current_annual_labor_cost_idr,
@@ -530,7 +620,7 @@ if calculate_button:
     if pdf_bytes:
         safe_prospect_name = "".join(c for c in prospect_name if c.isalnum() or c in (' ', '_', '-')).strip()
         safe_location = "".join(c for c in prospect_location if c.isalnum() or c in (' ', '_', '-')).strip()
-        pdf_filename = f"{current_time.strftime('%y%m%d')} {safe_prospect_name} {safe_location}.pdf"
+        pdf_filename = f"{final_proposal_number} {safe_prospect_name} {safe_location}.pdf" # Gunakan nomor proposal otomatis
 
         st.download_button(
             label="📥 Unduh PDF",
@@ -542,8 +632,10 @@ if calculate_button:
 
         # --- Unggah ke Google Drive & Log ke Google Sheet ---
         gdrive_pdf_link = None
+        if show_upload_log_section:
+             st.subheader("☁️ Unggah & Pencatatan")
+
         if trigger_gdrive_upload and credentials_info:
-            st.subheader("☁️ Unggah & Pencatatan")
             gdrive_service = None
             with st.spinner("Menghubungkan ke Google Drive..."):
                 gdrive_service = get_gdrive_service(credentials_info)
@@ -560,19 +652,32 @@ if calculate_button:
             else:
                  st.error("Gagal terhubung ke Google Drive. File tidak diunggah.")
 
-            # --- Log ke Google Sheet (Akan ditambahkan nanti) ---
-            # if trigger_gsheet_log and gdrive_pdf_link:
-            #     gsheet_service = None
-            #     with st.spinner("Menghubungkan ke Google Sheets..."):
-            #         gsheet_service = get_gsheets_service(credentials_info)
-            #     if gsheet_service:
-            #         log_data = { ... kumpulkan data log ... }
-            #         with st.spinner("Mencatat proposal ke Google Sheet..."):
-            #              log_to_gsheet(gsheet_service, google_sheet_id, log_data)
-            #     else:
-            #         st.error("Gagal terhubung ke Google Sheets. Proposal tidak dicatat.")
-            # elif trigger_gsheet_log and not gdrive_pdf_link:
-            #      st.warning("PDF gagal diunggah ke Drive, pencatatan ke Google Sheet dilewati.")
+        # --- Log ke Google Sheet --- 
+        if trigger_gsheet_log and credentials_info:
+            gsheet_service = None
+            # Coba dapatkan service lagi jika belum ada
+            if 'gsheets_service' not in locals() or not gsheets_service:
+                with st.spinner("Menghubungkan ke Google Sheets..."):
+                    gsheet_service = get_gsheets_service(credentials_info)
+
+            if gsheet_service:
+                log_data = {
+                    'proposal_number': final_proposal_number,
+                    'agent_name': agent_name,
+                    'agent_email': agent_email,
+                    'agent_phone': agent_phone,
+                    'prospect_name': prospect_name,
+                    'prospect_location': prospect_location,
+                    'gdrive_link': gdrive_pdf_link or "Upload Gagal/Tidak Dilakukan"
+                }
+                with st.spinner("Mencatat proposal ke Google Sheet..."):
+                     log_success = log_to_gsheet(gsheet_service, google_sheet_id, log_data)
+                     if log_success:
+                         st.success("Proposal berhasil dicatat ke Google Sheet.")
+            else:
+                st.error("Gagal terhubung ke Google Sheets. Proposal tidak dicatat.")
+        elif trigger_gsheet_log and not credentials_info:
+             st.warning("Kredensial Google tidak valid/ditemukan. Proposal tidak dicatat ke Google Sheet.")
 
     else:
         st.error("Gagal menghasilkan file PDF. Tidak ada yang dapat diunduh atau diunggah.")
