@@ -82,9 +82,16 @@ SCOPES = ['https://www.googleapis.com/auth/drive']
 def get_gdrive_service(credentials_info):
     """Membuat service Google Drive dari info kredensial service account."""
     try:
+        # Validasi minimal field yang dibutuhkan
+        if not all(k in credentials_info for k in ("type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri")):
+             st.error("Format file kunci JSON Service Account tidak lengkap. Pastikan Anda mengunduh file yang benar dari Google Cloud Console (IAM & Admin > Service Accounts > Keys > Add Key > Create new key > JSON).")
+             return None
         credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
         service = build('drive', 'v3', credentials=credentials)
         return service
+    except ValueError as ve:
+        st.error(f"Error memproses kredensial Service Account: {ve}. Pastikan file JSON valid.")
+        return None
     except Exception as e:
         st.error(f"Gagal membuat service Google Drive: {e}")
         return None
@@ -102,7 +109,7 @@ def find_or_create_folder(service, folder_name, parent_folder_id):
         folders = response.get('files', [])
 
         if folders:
-            st.info(f"Folder '{safe_folder_name}' ditemukan di Google Drive.")
+            # st.info(f"Folder '{safe_folder_name}' ditemukan di Google Drive.") # Kurangi verbosity
             return folders[0].get('id')
         else:
             st.info(f"Folder '{safe_folder_name}' tidak ditemukan. Membuat folder baru...")
@@ -145,11 +152,11 @@ def upload_to_drive(service, pdf_bytes, filename, prospect_folder_id):
         return response.get('id')
     except HttpError as error:
         st.error(f"Error saat mengunggah file ke Google Drive: {error}")
-        if hasattr(progress_bar, 'empty'): progress_bar.empty()
+        if 'progress_bar' in locals() and hasattr(progress_bar, 'empty'): progress_bar.empty()
         return None
     except Exception as e:
         st.error(f"Error tidak terduga saat unggah Google Drive: {e}")
-        if hasattr(progress_bar, 'empty'): progress_bar.empty()
+        if 'progress_bar' in locals() and hasattr(progress_bar, 'empty'): progress_bar.empty()
         return None
 
 # --- Judul dan Deskripsi Aplikasi ---
@@ -195,7 +202,7 @@ with st.sidebar:
     # Input Google Drive
     st.subheader("☁️ Pengaturan Google Drive")
     gdrive_parent_folder_id = st.text_input("ID Folder Induk Google Drive", "", help="Masukkan ID folder di Google Drive tempat folder prospek akan dibuat.")
-    uploaded_key_file = st.file_uploader("Unggah File Kunci JSON Service Account", type=['json'], help="Unduh file ini dari Google Cloud Console setelah membuat Service Account.")
+    uploaded_key_file = st.file_uploader("Unggah File Kunci JSON Service Account", type=['json'], help="Unduh file ini dari Google Cloud Console (IAM & Admin > Service Accounts > Keys > Add Key > Create new key > JSON).")
 
     # Tombol Kalkulasi
     calculate_button = st.button("🚀 Hitung ROI, Buat PDF & Unggah ke Drive")
@@ -208,12 +215,17 @@ if calculate_button:
     if uploaded_key_file is not None:
         if not gdrive_parent_folder_id:
             st.sidebar.error("Harap masukkan ID Folder Induk Google Drive untuk mengunggah.")
-            # Tetap lanjutkan kalkulasi & pembuatan PDF, tapi jangan unggah
         else:
             try:
-                credentials_info = json.load(uploaded_key_file)
-                st.sidebar.success("File kunci JSON berhasil dibaca.")
-                trigger_gdrive_upload = True # Siap untuk unggah
+                # Baca file yang diunggah sebagai bytes dan decode
+                stringio = io.StringIO(uploaded_key_file.getvalue().decode("utf-8"))
+                credentials_info = json.load(stringio)
+                # Validasi minimal field yang dibutuhkan (dilakukan lagi di get_gdrive_service, tapi cek awal di sini)
+                if not all(k in credentials_info for k in ("type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri")):
+                    st.sidebar.error("Format file kunci JSON tidak lengkap. Pastikan file JSON Service Account yang benar diunggah.")
+                else:
+                    st.sidebar.success("File kunci JSON berhasil dibaca.")
+                    trigger_gdrive_upload = True # Siap untuk unggah
             except json.JSONDecodeError:
                 st.sidebar.error("File kunci JSON tidak valid. PDF tidak akan diunggah.")
             except Exception as e:
@@ -314,7 +326,8 @@ if calculate_button:
         chart_buffer.seek(0)
         chart_base64 = base64.b64encode(chart_buffer.read()).decode()
         chart_data_uri = f"data:image/png;base64,{chart_base64}"
-        st.image(chart_buffer, caption="Grafik Analisis ROI", use_column_width=True)
+        # Ganti use_column_width dengan use_container_width
+        st.image(chart_buffer, caption="Grafik Analisis ROI", use_container_width=True)
     except Exception as e:
         st.error(f"Gagal membuat grafik: {e}")
 
@@ -426,7 +439,7 @@ if calculate_button:
                 else:
                     st.error("Gagal mendapatkan atau membuat folder prospek di Google Drive. File tidak diunggah.")
             else:
-                 st.error("Gagal terhubung ke Google Drive. File tidak diunggah.")
+                 st.error("Gagal terhubung ke Google Drive (periksa format file kunci JSON). File tidak diunggah.") # Pesan error diperjelas
         elif gdrive_parent_folder_id and not uploaded_key_file:
              st.warning("File kunci JSON tidak diunggah. PDF tidak diunggah ke Google Drive.")
 
