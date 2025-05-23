@@ -1,189 +1,407 @@
-import streamlit as st
-import matplotlib.pyplot as plt
-from datetime import datetime
-import os
-import base64
-from io import BytesIO
-
-# Konfigurasi halaman
-st.set_page_config(
-    page_title="Kalkulator ROI AI Voice",
-    page_icon="📈",
-    layout="wide"
-)
-
-# Fungsi untuk generate laporan
-def generate_report(params, fig):
-    md_content = f"""# Analisis ROI Solusi AI Voice untuk {params['broker_name']}
-
-**Tanggal Analisis:** {datetime.now().strftime('%d %B %Y')}  
-**Broker:** {params['broker_name']}  
-**Lokasi:** {params['broker_location']}  
-
-## Informasi Operasional Saat Ini
-
-| Metrik | Nilai |
-|--------|-------|
-| Jumlah Staf Layanan Pelanggan | {params['cs_staff']} |
-| Biaya Tenaga Kerja Tahunan | IDR {params['current_annual_labor_cost_idr']:,.2f} (USD {params['current_annual_labor_cost_usd']:,.2f}) |
-| Pertanyaan Tahunan | {params['current_inquiries_per_year']:,} |
-| Jam Penanganan yang Dibutuhkan | {params['current_handling_hours']:,.2f} |
-| Tingkat Loyalitas Klien | {params['current_retention_rate']}% |
-
-## Proyeksi dengan Solusi AI Voice
-
-| Metrik | Nilai |
-|--------|-------|
-| Jumlah Staf | {params['new_staff_count']} |
-| Biaya Tenaga Kerja Tahunan | IDR {params['new_annual_labor_cost_idr']:,.2f} (USD {params['new_annual_labor_cost_usd']:,.2f}) |
-| Pertanyaan Diotomatisasi | {params['automated_inquiries']:,.0f} ({params['automation_rate']}%) |
-| ROI Tahun Pertama | {params['first_year_roi']:.2f}% |
-| ROI 3 Tahun | {params['three_year_roi']:.2f}% |
-
-![Proyeksi 5 Tahun](data:image/png;base64,{fig})
+# -*- coding: utf-8 -*-
 """
-    return md_content
+Modifikasi skrip ROI Calculator untuk dijalankan di Streamlit,
+menambahkan input administrasi, menghasilkan output PDF, dan mengunggah ke Google Drive.
+"""
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+from datetime import datetime
+import locale
+import io
+import base64
+import json
+from weasyprint import HTML
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-# UI Streamlit
-def main():
-    st.title("📊 Kalkulator ROI Solusi AI Voice")
-    st.caption("Aplikasi untuk menghitung Return on Investment implementasi solusi AI Voice")
+# Import Google Drive libraries
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.errors import HttpError
 
-    with st.sidebar:
-        st.header("🔧 Parameter Input")
-        
-        st.subheader("Informasi Broker")
-        broker_name = st.text_input("Nama Broker Forex")
-        broker_location = st.text_input("Lokasi Broker")
-        
-        st.subheader("Data Operasional")
-        cs_staff = st.number_input("Jumlah Staf Layanan Pelanggan", min_value=1, value=5)
-        avg_monthly_salary = st.number_input("Rata-rata Gaji Bulanan per Staf (IDR)", min_value=0, value=15000000)
-        overhead_multiplier = st.slider("Pengali Overhead", 1.0, 2.0, 1.3)
-        usd_conversion_rate = st.number_input("Kurs IDR ke USD", min_value=1.0, value=15500.0)
-        
-        monthly_inquiries = st.number_input("Pertanyaan Bulanan", min_value=0, value=500)
-        avg_handling_time = st.number_input("Waktu Penanganan per Pertanyaan (menit)", min_value=0.0, value=15.0)
-        
-        avg_monthly_clients = st.number_input("Klien Aktif Bulanan", min_value=0, value=200)
-        avg_monthly_client_value = st.number_input("Pendapatan Bulanan per Klien (USD)", min_value=0.0, value=150.0)
-        current_retention_rate = st.slider("Tingkat Loyalitas Klien (%)", 0, 100, 70)
-        
-        st.subheader("Biaya AI Voice")
-        implementation_cost = st.number_input("Biaya Implementasi (USD)", min_value=0.0, value=10000.0)
-        annual_subscription = st.number_input("Biaya Langganan Tahunan (USD)", min_value=0.0, value=5000.0)
-        
-        st.subheader("Asumsi Dampak")
-        automation_rate = st.slider("Persentase Otomatisasi (%)", 0, 100, 70)
-        staff_reduction = st.slider("Pengurangan Staf (%)", 0, 100, 30)
-        retention_improvement = st.slider("Peningkatan Loyalitas (% point)", 0, 20, 5)
-        handling_time_improvement = st.slider("Peningkatan Efisiensi Waktu (%)", 0, 50, 20)
+# --- Konfigurasi Awal ---
 
-    # Kalkulasi
-    if st.button("🚀 Hitung ROI"):
-        with st.spinner('Menghitung...'):
-            # Konversi ke tahunan
-            avg_annual_salary = avg_monthly_salary * 12
-            avg_client_value = avg_monthly_client_value * 12
-            
-            # Perhitungan (sama seperti script asli)
-            avg_annual_salary_usd = avg_annual_salary / usd_conversion_rate
-            current_annual_labor_cost_usd = cs_staff * avg_annual_salary_usd * overhead_multiplier
-            current_annual_labor_cost_idr = current_annual_labor_cost_usd * usd_conversion_rate
-            current_inquiries_per_year = monthly_inquiries * 12
-            current_handling_hours = (current_inquiries_per_year * avg_handling_time) / 60
-            
-            automated_inquiries = current_inquiries_per_year * (automation_rate / 100)
-            remaining_manual_inquiries = current_inquiries_per_year - automated_inquiries
-            new_handling_time = avg_handling_time * (1 - handling_time_improvement / 100)
-            new_handling_hours = (remaining_manual_inquiries * new_handling_time) / 60
-            
-            new_staff_count = round(cs_staff * (1 - staff_reduction / 100))
-            new_annual_labor_cost_usd = new_staff_count * avg_annual_salary_usd * overhead_multiplier
-            new_annual_labor_cost_idr = new_annual_labor_cost_usd * usd_conversion_rate
-            
-            labor_savings_usd = current_annual_labor_cost_usd - new_annual_labor_cost_usd
-            labor_savings_idr = labor_savings_usd * usd_conversion_rate
-            
-            new_retention_rate = min(100, current_retention_rate + retention_improvement)
-            current_churned_clients = avg_monthly_clients * (1 - current_retention_rate / 100)
-            new_churned_clients = avg_monthly_clients * (1 - new_retention_rate / 100)
-            clients_saved = current_churned_clients - new_churned_clients
-            retention_revenue_impact = clients_saved * avg_client_value
-            
-            total_annual_savings_usd = labor_savings_usd + retention_revenue_impact
-            total_annual_savings_idr = labor_savings_idr + (retention_revenue_impact * usd_conversion_rate)
-            first_year_net_usd = total_annual_savings_usd - implementation_cost - annual_subscription
-            subsequent_years_net_usd = total_annual_savings_usd - annual_subscription
-            
-            first_year_roi = (first_year_net_usd / (implementation_cost + annual_subscription)) * 100
-            three_year_roi = ((first_year_net_usd + subsequent_years_net_usd * 2) / (implementation_cost + annual_subscription * 3)) * 100
-            
-            monthly_savings_usd = total_annual_savings_usd / 12
-            total_investment_usd = implementation_cost + annual_subscription
-            payback_period = total_investment_usd / monthly_savings_usd
-            
-            # Grafik
-            years = range(1, 6)
-            costs = [implementation_cost + annual_subscription if year == 1 else annual_subscription for year in years]
-            benefits = [total_annual_savings_usd for _ in years]
-            net_benefits = [benefits[i] - costs[i] for i in range(len(years))]
-            cumulative_net = [sum(net_benefits[:i+1]) for i in range(len(years))]
-            
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(years, cumulative_net, marker='o', color='#4CAF50')
-            ax.set_title('Proyeksi 5 Tahun (USD)')
-            ax.set_xlabel('Tahun')
-            ax.set_ylabel('Manfaat Kumulatif')
-            ax.grid(True)
-            
-            # Simpan gambar ke base64
-            buf = BytesIO()
-            plt.savefig(buf, format="png")
-            plt.close()
-            fig_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-            
-            # Parameter untuk laporan
-            params = {
-                'broker_name': broker_name,
-                'broker_location': broker_location,
-                'cs_staff': cs_staff,
-                'current_annual_labor_cost_idr': current_annual_labor_cost_idr,
-                'current_annual_labor_cost_usd': current_annual_labor_cost_usd,
-                'current_inquiries_per_year': current_inquiries_per_year,
-                'current_handling_hours': current_handling_hours,
-                'current_retention_rate': current_retention_rate,
-                'new_staff_count': new_staff_count,
-                'new_annual_labor_cost_idr': new_annual_labor_cost_idr,
-                'new_annual_labor_cost_usd': new_annual_labor_cost_usd,
-                'automated_inquiries': automated_inquiries,
-                'automation_rate': automation_rate,
-                'first_year_roi': first_year_roi,
-                'three_year_roi': three_year_roi
+# Set locale ke Indonesian untuk format angka dan tanggal
+try:
+    locale.setlocale(locale.LC_ALL, 'id_ID.UTF-8')
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_ALL, 'id_ID')
+    except locale.Error:
+        st.warning("Tidak dapat mengatur locale ke Indonesia (id_ID.UTF-8 atau id_ID). Format angka mungkin tidak sesuai.")
+
+# --- Fungsi Bantuan ---
+
+def format_number_id(value, precision=2):
+    """Format angka ke format Indonesia (ribuan pakai titik, desimal pakai koma)."""
+    try:
+        if isinstance(value, (int, float)):
+            # Handle infinity
+            if value == float('inf') or value == float('-inf'):
+                return "N/A"
+            format_str = f"%.{precision}f"
+            formatted_value = locale.format_string(format_str, value, grouping=True)
+            return formatted_value
+        return value
+    except (TypeError, ValueError):
+        return value
+
+def generate_pdf(data):
+    """Menghasilkan PDF dari data menggunakan template Jinja2 dan WeasyPrint."""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        env = Environment(
+            loader=FileSystemLoader(script_dir),
+            autoescape=select_autoescape(['html'])
+        )
+        env.filters['format_number'] = format_number_id
+        template = env.get_template('template.html')
+        html_out = template.render(data)
+        pdf_bytes = HTML(string=html_out, base_url=script_dir).write_pdf()
+        return pdf_bytes
+    except Exception as e:
+        st.error(f"Error saat membuat PDF: {e}")
+        return None
+
+# --- Fungsi Google Drive ---
+
+SCOPES = ['https://www.googleapis.com/auth/drive']
+
+def get_gdrive_service(credentials_info):
+    """Membuat service Google Drive dari info kredensial service account."""
+    try:
+        credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
+        service = build('drive', 'v3', credentials=credentials)
+        return service
+    except Exception as e:
+        st.error(f"Gagal membuat service Google Drive: {e}")
+        return None
+
+def find_or_create_folder(service, folder_name, parent_folder_id):
+    """Mencari folder berdasarkan nama di dalam parent folder, atau membuatnya jika tidak ada."""
+    try:
+        # Cari folder yang ada
+        query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
+        response = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+        folders = response.get('files', [])
+
+        if folders:
+            st.info(f"Folder '{folder_name}' ditemukan di Google Drive.")
+            return folders[0].get('id')
+        else:
+            # Buat folder jika tidak ditemukan
+            st.info(f"Folder '{folder_name}' tidak ditemukan. Membuat folder baru...")
+            file_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder',
+                'parents': [parent_folder_id]
             }
-            
-            # Hasil utama
-            st.success("Perhitungan Selesai!")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("ROI Tahun Pertama", f"{first_year_roi:.2f}%")
-                st.metric("Penghematan Tahunan", f"USD {total_annual_savings_usd:,.2f}")
-                
-            with col2:
-                st.metric("ROI 3 Tahun", f"{three_year_roi:.2f}%")
-                st.metric("Periode Pengembalian", f"{payback_period:.1f} bulan")
-            
-            st.pyplot(fig)
-            
-            # Generate dan download laporan
-            report = generate_report(params, fig_base64)
-            st.download_button(
-                label="📥 Download Laporan (MD)",
-                data=report,
-                file_name=f"ROI_AI_Voice_{broker_name.replace(' ','_')}.md",
-                mime="text/markdown"
-            )
+            folder = service.files().create(body=file_metadata, fields='id').execute()
+            st.success(f"Folder '{folder_name}' berhasil dibuat.")
+            return folder.get('id')
+    except HttpError as error:
+        st.error(f"Error saat mencari/membuat folder di Google Drive: {error}")
+        return None
+    except Exception as e:
+        st.error(f"Error tidak terduga saat operasi folder Google Drive: {e}")
+        return None
 
-if __name__ == "__main__":
-    main()
+def upload_to_drive(service, pdf_bytes, filename, prospect_folder_id):
+    """Mengunggah file PDF ke folder prospek yang ditentukan di Google Drive."""
+    try:
+        file_metadata = {
+            'name': filename,
+            'parents': [prospect_folder_id]
+        }
+        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype='application/pdf')
+        file = service.files().create(body=file_metadata,
+                                      media_body=media,
+                                      fields='id, webViewLink').execute()
+        st.success(f"File '{filename}' berhasil diunggah ke Google Drive.")
+        st.markdown(f"[Lihat File di Google Drive]({file.get('webViewLink')})", unsafe_allow_html=True)
+        return file.get('id')
+    except HttpError as error:
+        st.error(f"Error saat mengunggah file ke Google Drive: {error}")
+        return None
+    except Exception as e:
+        st.error(f"Error tidak terduga saat unggah Google Drive: {e}")
+        return None
+
+# --- Aplikasi Streamlit ---
+st.set_page_config(layout="wide", page_title="Kalkulator ROI AI Voice Broker")
+
+st.title("📊 Kalkulator ROI Solusi AI Voice untuk Broker Forex")
+st.markdown("Masukkan data operasional dan asumsi untuk menghitung potensi ROI, lalu hasilkan proposal PDF dan simpan ke Google Drive.")
+
+# --- Input Data --- 
+with st.sidebar:
+    st.header("⚙️ Input Data")
+
+    # Informasi Proposal & Prospek (sama seperti sebelumnya)
+    st.subheader("Informasi Proposal & Prospek")
+    proposal_number = st.text_input("Nomor Proposal", "PROP-" + datetime.now().strftime("%y%m%d") + "-001")
+    prospect_name = st.text_input("Nama Prospek (Broker Forex)", "PT Contoh Broker")
+    prospect_location = st.text_input("Lokasi Prospek", "Jakarta")
+    provider_company_name = st.text_input("Nama Perusahaan Penyedia (Anda)", "AI Solutions Indonesia")
+    creator_name = st.text_input("Nama Pembuat Proposal (Marketing)", "Tim Marketing")
+
+    # Metrik Operasional (sama seperti sebelumnya)
+    st.subheader("Metrik Operasional Saat Ini")
+    cs_staff = st.number_input("Jumlah staf layanan pelanggan", min_value=1, value=10)
+    avg_monthly_salary = st.number_input("Rata-rata gaji bulanan per staf (IDR)", min_value=0, value=7000000, step=100000)
+    overhead_multiplier = st.number_input("Pengali overhead (tunjangan, dll.)", min_value=1.0, value=1.3, step=0.1)
+    usd_conversion_rate = st.number_input("Kurs konversi IDR ke USD", min_value=1000, value=15500, step=100)
+    monthly_inquiries = st.number_input("Rata-rata pertanyaan pelanggan bulanan", min_value=0, value=5000, step=100)
+    avg_handling_time = st.number_input("Rata-rata waktu penanganan per pertanyaan (menit)", min_value=0.0, value=5.0, step=0.5)
+    avg_monthly_clients = st.number_input("Rata-rata jumlah klien aktif per bulan", min_value=0, value=1000, step=50)
+    avg_monthly_client_value = st.number_input("Rata-rata pendapatan BULANAN per klien (USD)", min_value=0.0, value=50.0, step=5.0)
+    current_retention_rate = st.number_input("Tingkat loyalitas klien tahunan saat ini (%)", min_value=0.0, max_value=100.0, value=85.0, step=1.0)
+
+    # Investasi Solusi AI Voice (sama seperti sebelumnya)
+    st.subheader("Investasi Solusi AI Voice")
+    implementation_cost = st.number_input("Biaya implementasi satu kali (USD)", min_value=0.0, value=10000.0, step=1000.0)
+    annual_subscription = st.number_input("Biaya langganan tahunan (USD)", min_value=0.0, value=5000.0, step=500.0)
+
+    # Asumsi Dampak (sama seperti sebelumnya)
+    st.subheader("Asumsi Dampak Solusi AI Voice")
+    automation_rate = st.slider("Persentase pertanyaan yang dapat diotomatisasi (%) ", 0, 100, 75)
+    staff_reduction = st.slider("Persentase pengurangan staf layanan pelanggan (%) ", 0, 100, 35)
+    retention_improvement = st.slider("Peningkatan poin persentase dalam loyalitas klien (%) ", 0.0, 20.0, 7.5, 0.5)
+    handling_time_improvement = st.slider("Persentase peningkatan waktu penanganan manual (%) ", 0, 100, 25)
+
+    # --- Input Google Drive ---
+    st.subheader("☁️ Pengaturan Google Drive")
+    gdrive_parent_folder_id = st.text_input("ID Folder Induk Google Drive", "", help="Masukkan ID folder di Google Drive tempat folder prospek akan dibuat.")
+    uploaded_key_file = st.file_uploader("Unggah File Kunci JSON Service Account", type=['json'], help="Unduh file ini dari Google Cloud Console setelah membuat Service Account.")
+
+    # Tombol untuk memulai kalkulasi
+    calculate_button = st.button("🚀 Hitung ROI, Buat PDF & Unggah ke Drive")
+
+# --- Kalkulasi & Output --- 
+if calculate_button:
+    # Validasi input Google Drive jika diisi
+    credentials_info = None
+    if uploaded_key_file is not None:
+        if not gdrive_parent_folder_id:
+            st.sidebar.error("Harap masukkan ID Folder Induk Google Drive.")
+            st.stop() # Hentikan eksekusi jika ID folder tidak ada tapi file kunci ada
+        try:
+            credentials_info = json.load(uploaded_key_file)
+            st.sidebar.success("File kunci JSON berhasil dibaca.")
+        except json.JSONDecodeError:
+            st.sidebar.error("File kunci JSON tidak valid.")
+            st.stop()
+        except Exception as e:
+            st.sidebar.error(f"Error membaca file kunci: {e}")
+            st.stop()
+    elif gdrive_parent_folder_id:
+        st.sidebar.warning("ID Folder Induk dimasukkan, tetapi file kunci JSON belum diunggah. PDF tidak akan diunggah ke Google Drive.")
+
+    st.header("📈 Hasil Analisis ROI")
+
+    # --- Kalkulasi Inti (sama seperti sebelumnya) ---
+    avg_annual_salary = avg_monthly_salary * 12
+    avg_annual_salary_usd = avg_annual_salary / usd_conversion_rate
+    avg_client_value = avg_monthly_client_value * 12
+    current_annual_labor_cost_usd = cs_staff * avg_annual_salary_usd * overhead_multiplier
+    current_annual_labor_cost_idr = current_annual_labor_cost_usd * usd_conversion_rate
+    current_inquiries_per_year = monthly_inquiries * 12
+    current_handling_hours = (current_inquiries_per_year * avg_handling_time) / 60
+    automated_inquiries = current_inquiries_per_year * (automation_rate / 100)
+    remaining_manual_inquiries = current_inquiries_per_year - automated_inquiries
+    new_handling_time = avg_handling_time * (1 - handling_time_improvement / 100)
+    new_handling_hours = (remaining_manual_inquiries * new_handling_time) / 60
+    new_staff_count = round(cs_staff * (1 - staff_reduction / 100))
+    if new_handling_hours > 0 and new_staff_count == 0:
+        new_staff_count = 1
+    new_annual_labor_cost_usd = new_staff_count * avg_annual_salary_usd * overhead_multiplier
+    new_annual_labor_cost_idr = new_annual_labor_cost_usd * usd_conversion_rate
+    labor_savings_usd = current_annual_labor_cost_usd - new_annual_labor_cost_usd
+    labor_savings_idr = labor_savings_usd * usd_conversion_rate
+    new_retention_rate = min(100.0, current_retention_rate + retention_improvement)
+    avg_annual_clients = avg_monthly_clients
+    current_retained_clients = avg_annual_clients * (current_retention_rate / 100)
+    new_retained_clients = avg_annual_clients * (new_retention_rate / 100)
+    additional_retained_clients = new_retained_clients - current_retained_clients
+    retention_revenue_impact = additional_retained_clients * avg_client_value
+    total_annual_savings_usd = labor_savings_usd + retention_revenue_impact
+    total_annual_savings_idr = labor_savings_idr + (retention_revenue_impact * usd_conversion_rate)
+    first_year_net_usd = total_annual_savings_usd - implementation_cost - annual_subscription
+    subsequent_years_net_usd = total_annual_savings_usd - annual_subscription
+    total_first_year_investment = implementation_cost + annual_subscription
+    total_three_year_investment = implementation_cost + annual_subscription * 3
+    first_year_roi = (first_year_net_usd / total_first_year_investment * 100) if total_first_year_investment > 0 else float('inf')
+    three_year_net_benefit = first_year_net_usd + subsequent_years_net_usd * 2
+    three_year_roi = (three_year_net_benefit / total_three_year_investment * 100) if total_three_year_investment > 0 else float('inf')
+    monthly_savings_usd = total_annual_savings_usd / 12
+    total_investment_usd = implementation_cost + annual_subscription
+    payback_period = (total_investment_usd / monthly_savings_usd) if monthly_savings_usd > 0 else float('inf')
+    years = range(1, 6)
+    costs = [(implementation_cost + annual_subscription) if year == 1 else annual_subscription for year in years]
+    benefits = [total_annual_savings_usd for _ in years]
+    net_benefits = [benefits[i] - costs[i] for i in range(len(years))]
+    cumulative_net = np.cumsum(net_benefits).tolist()
+    five_year_net_benefit = cumulative_net[-1] if cumulative_net else 0
+    five_year_projection_data = []
+    for i in range(len(years)):
+        five_year_projection_data.append({
+            'year': years[i],
+            'cost': costs[i],
+            'benefit': benefits[i],
+            'net_benefit': net_benefits[i],
+            'cumulative_net': cumulative_net[i]
+        })
+
+    # --- Generate Chart (sama seperti sebelumnya) ---
+    chart_buffer = io.BytesIO()
+    chart_data_uri = None
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        plt.style.use('seaborn-v0_8-whitegrid')
+        labels_cost = ['Saat Ini', 'Dengan AI Voice']
+        cs_costs_idr = [current_annual_labor_cost_idr, new_annual_labor_cost_idr]
+        colors_cost = ['#3A86FF', '#8338EC']
+        bars = ax1.bar(labels_cost, cs_costs_idr, color=colors_cost)
+        ax1.set_title('Perbandingan Biaya Tahunan (IDR)', fontsize=12)
+        ax1.set_ylabel('Biaya (IDR)', fontsize=10)
+        ax1.tick_params(axis='x', labelsize=10)
+        ax1.tick_params(axis='y', labelsize=10)
+        ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: locale.format_string("%d", x, grouping=True)))
+        for bar in bars:
+            yval = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2.0, yval, f'IDR {locale.format_string("%.0f", yval, grouping=True)}', va='bottom', ha='center', fontsize=9)
+        ax2.plot(years, cumulative_net, marker='o', linewidth=2, color='#FF006E', label='Manfaat Bersih Kumulatif')
+        ax2.set_title('Manfaat Bersih Kumulatif 5 Tahun (USD)', fontsize=12)
+        ax2.set_xlabel('Tahun', fontsize=10)
+        ax2.set_ylabel('USD', fontsize=10)
+        ax2.grid(True, linestyle='--', alpha=0.6)
+        ax2.set_xticks(years)
+        ax2.tick_params(axis='x', labelsize=10)
+        ax2.tick_params(axis='y', labelsize=10)
+        ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${locale.format_string("%d", x, grouping=True)}'))
+        for i, value in enumerate(cumulative_net):
+             ax2.text(years[i], value, f'${locale.format_string("%.0f", value, grouping=True)}', ha='center', va='bottom', fontsize=9)
+        plt.tight_layout(pad=2.0)
+        plt.savefig(chart_buffer, format='png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        chart_buffer.seek(0)
+        chart_base64 = base64.b64encode(chart_buffer.read()).decode()
+        chart_data_uri = f"data:image/png;base64,{chart_base64}"
+        st.image(chart_buffer, caption="Grafik Analisis ROI", use_column_width=True)
+    except Exception as e:
+        st.error(f"Gagal membuat grafik: {e}")
+
+    # --- Tampilkan Ringkasan di Streamlit (sama seperti sebelumnya) ---
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Ringkasan Hasil Utama")
+        st.metric(label="ROI Tahun Pertama", value=f"{format_number_id(first_year_roi)}%")
+        st.metric(label="ROI Tiga Tahun", value=f"{format_number_id(three_year_roi)}%")
+        st.metric(label="Periode Pengembalian", value=f"{format_number_id(payback_period, 1)} bulan" if payback_period != float('inf') else "Tidak Tercapai")
+        st.metric(label="Total Penghematan Tahunan (USD)", value=f"$ {format_number_id(total_annual_savings_usd)}")
+        st.metric(label="Manfaat Bersih 5 Tahun (USD)", value=f"$ {format_number_id(five_year_net_benefit)}")
+    with col2:
+        st.subheader("Perubahan Operasional Utama")
+        st.metric(label="Pengurangan Staf", value=f"{cs_staff - new_staff_count} orang ({staff_reduction}%)")
+        st.metric(label="Otomatisasi Pertanyaan", value=f"{format_number_id(automated_inquiries, 0)} ({automation_rate}%)")
+        st.metric(label="Peningkatan Loyalitas Klien", value=f"+{retention_improvement}% (menjadi {new_retention_rate}%)")
+        st.metric(label="Penghematan Biaya Tenaga Kerja Tahunan (IDR)", value=f"Rp {format_number_id(labor_savings_idr)}")
+
+    # --- Kesimpulan Teks (sama seperti sebelumnya) ---
+    st.subheader("Kesimpulan")
+    if first_year_roi > 50 and payback_period < 18:
+        conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} sangat direkomendasikan..."
+    elif first_year_roi > 0:
+        conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} direkomendasikan..."
+    elif three_year_roi > 0:
+         conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} patut dipertimbangkan..."
+    else:
+        conclusion_text = f"Berdasarkan data dan asumsi saat ini, ROI untuk implementasi Solusi AI Voice bagi {prospect_name} terlihat kurang menarik..."
+    st.markdown(conclusion_text) # Teks kesimpulan lengkap ada di versi sebelumnya
+
+    # --- Persiapan Data untuk PDF (sama seperti sebelumnya) ---
+    pdf_data = {
+        # ... (semua data dari versi sebelumnya)
+        'proposal_number': proposal_number,
+        'analysis_date': datetime.now().strftime('%d %B %Y'),
+        'prospect_name': prospect_name,
+        'prospect_location': prospect_location,
+        'provider_company_name': provider_company_name,
+        'creator_name': creator_name,
+        'cs_staff': cs_staff,
+        'current_annual_labor_cost_idr': current_annual_labor_cost_idr,
+        'current_annual_labor_cost_usd': current_annual_labor_cost_usd,
+        'current_inquiries_per_year': current_inquiries_per_year,
+        'current_handling_hours': current_handling_hours,
+        'current_retention_rate': current_retention_rate,
+        'new_staff_count': new_staff_count,
+        'new_annual_labor_cost_idr': new_annual_labor_cost_idr,
+        'new_annual_labor_cost_usd': new_annual_labor_cost_usd,
+        'automated_inquiries': automated_inquiries,
+        'automation_rate': automation_rate,
+        'new_handling_hours': new_handling_hours,
+        'new_retention_rate': new_retention_rate,
+        'labor_savings_idr': labor_savings_idr,
+        'labor_savings_usd': labor_savings_usd,
+        'retention_revenue_impact': retention_revenue_impact,
+        'total_annual_savings_usd': total_annual_savings_usd,
+        'first_year_net_usd': first_year_net_usd,
+        'subsequent_years_net_usd': subsequent_years_net_usd,
+        'first_year_roi': first_year_roi,
+        'three_year_roi': three_year_roi,
+        'payback_period': payback_period,
+        'five_year_net_benefit': five_year_net_benefit,
+        'five_year_projection': five_year_projection_data,
+        'chart_path': chart_data_uri if chart_data_uri else '',
+        'avg_monthly_salary': avg_monthly_salary,
+        'overhead_multiplier': overhead_multiplier,
+        'usd_conversion_rate': usd_conversion_rate,
+        'staff_reduction': staff_reduction,
+        'retention_improvement': retention_improvement,
+        'handling_time_improvement': handling_time_improvement,
+        'conclusion_text': conclusion_text
+    }
+
+    # --- Generate PDF --- 
+    st.subheader("📄 Proposal PDF")
+    pdf_bytes = generate_pdf(pdf_data)
+    pdf_filename = f"{datetime.now().strftime('%y%m%d')} {prospect_name} {prospect_location}.pdf"
+
+    if pdf_bytes:
+        st.download_button(
+            label="📥 Unduh PDF",
+            data=pdf_bytes,
+            file_name=pdf_filename,
+            mime="application/pdf"
+        )
+        st.success(f"Proposal PDF siap diunduh: **{pdf_filename}**")
+
+        # --- Unggah ke Google Drive --- 
+        if credentials_info and gdrive_parent_folder_id:
+            st.subheader("☁️ Unggah ke Google Drive")
+            with st.spinner("Menghubungkan ke Google Drive..."):
+                gdrive_service = get_gdrive_service(credentials_info)
+            
+            if gdrive_service:
+                with st.spinner(f"Mencari atau membuat folder '{prospect_name}'..."):
+                    prospect_folder_id = find_or_create_folder(gdrive_service, prospect_name, gdrive_parent_folder_id)
+                
+                if prospect_folder_id:
+                    with st.spinner(f"Mengunggah '{pdf_filename}' ke folder '{prospect_name}'..."):
+                        upload_to_drive(gdrive_service, pdf_bytes, pdf_filename, prospect_folder_id)
+                else:
+                    st.error("Gagal mendapatkan atau membuat folder prospek di Google Drive. File tidak diunggah.")
+            else:
+                 st.error("Gagal terhubung ke Google Drive. File tidak diunggah.")
+        elif gdrive_parent_folder_id and not uploaded_key_file:
+             st.warning("File kunci JSON tidak diunggah. PDF tidak diunggah ke Google Drive.")
+
+    else:
+        st.error("Gagal menghasilkan file PDF. Tidak ada yang diunggah ke Google Drive.")
+
+else:
+    st.info("Silakan isi data di sidebar kiri dan klik tombol 'Hitung ROI, Buat PDF & Unggah ke Drive' untuk melihat hasil.")
+

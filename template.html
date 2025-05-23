@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Analisis ROI - {{ prospect_name }}</title>
+    <style>
+        @font-face {
+            font-family: 'NotoSansCJK';
+            src: url('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc');
+        }
+        body {
+            font-family: 'NotoSansCJK', 'WenQuanYi Zen Hei', sans-serif;
+            font-size: 11pt;
+            line-height: 1.4;
+            margin: 2cm;
+        }
+        h1, h2, h3 {
+            color: #333;
+            margin-bottom: 0.5em;
+        }
+        h1 {
+            font-size: 20pt;
+            text-align: center;
+            margin-bottom: 1cm;
+            border-bottom: 2px solid #8338EC;
+            padding-bottom: 0.3cm;
+        }
+        h2 {
+            font-size: 16pt;
+            color: #3A86FF;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 0.1cm;
+            margin-top: 1cm;
+        }
+        h3 {
+            font-size: 13pt;
+            color: #FF006E;
+            margin-top: 0.8cm;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0.5cm;
+            margin-bottom: 0.8cm;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .header-info {
+            margin-bottom: 1cm;
+            padding: 0.5cm;
+            border: 1px solid #eee;
+            background-color: #f9f9f9;
+        }
+        .header-info p {
+            margin: 0.2em 0;
+        }
+        .conclusion {
+            margin-top: 1cm;
+            padding: 0.5cm;
+            background-color: #eef;
+            border-left: 5px solid #3A86FF;
+        }
+        .benefits li {
+            margin-bottom: 0.3em;
+        }
+        .footer {
+            position: fixed;
+            bottom: -1cm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 9pt;
+            color: #777;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 1cm auto;
+            border: 1px solid #ddd;
+        }
+        .currency-idr::before { content: "IDR "; }
+        .currency-usd::before { content: "USD "; }
+        .percentage::after { content: "%"; }
+        .months::after { content: " bulan"; }
+    </style>
+</head>
+<body>
+
+    <div class="footer">
+        Analisis ROI dibuat oleh {{ creator_name }} untuk {{ prospect_name }} | {{ analysis_date }}
+    </div>
+
+    <h1>Analisis ROI Solusi AI Voice untuk {{ prospect_name }}</h1>
+
+    <div class="header-info">
+        <h2>Informasi Proposal</h2>
+        <p><strong>Nomor Proposal:</strong> {{ proposal_number }}</p>
+        <p><strong>Tanggal Analisis:</strong> {{ analysis_date }}</p>
+        <p><strong>Nama Prospek:</strong> {{ prospect_name }}</p>
+        <p><strong>Lokasi Prospek:</strong> {{ prospect_location }}</p>
+        <p><strong>Perusahaan Penyedia:</strong> {{ provider_company_name }}</p>
+        <p><strong>Dibuat Oleh:</strong> {{ creator_name }}</p>
+    </div>
+
+    <h2>Informasi Operasional Saat Ini</h2>
+    <table>
+        <thead>
+            <tr><th>Metrik</th><th>Nilai</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Jumlah Staf Layanan Pelanggan</td><td>{{ cs_staff }}</td></tr>
+            <tr><td>Biaya Tenaga Kerja Tahunan</td><td><span class="currency-idr">{{ current_annual_labor_cost_idr | format_number }}</span> (<span class="currency-usd">{{ current_annual_labor_cost_usd | format_number }}</span>)</td></tr>
+            <tr><td>Pertanyaan Tahunan</td><td>{{ current_inquiries_per_year | format_number(0) }}</td></tr>
+            <tr><td>Jam Penanganan yang Dibutuhkan</td><td>{{ current_handling_hours | format_number }}</td></tr>
+            <tr><td>Tingkat Loyalitas Klien</td><td><span class="percentage">{{ current_retention_rate }}</span></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Proyeksi Operasional dengan Solusi AI Voice</h2>
+    <table>
+        <thead>
+            <tr><th>Metrik</th><th>Nilai</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Jumlah Staf Layanan Pelanggan</td><td>{{ new_staff_count }}</td></tr>
+            <tr><td>Biaya Tenaga Kerja Tahunan</td><td><span class="currency-idr">{{ new_annual_labor_cost_idr | format_number }}</span> (<span class="currency-usd">{{ new_annual_labor_cost_usd | format_number }}</span>)</td></tr>
+            <tr><td>Pertanyaan yang Diotomatisasi</td><td>{{ automated_inquiries | format_number(0) }} (<span class="percentage">{{ automation_rate }}</span>)</td></tr>
+            <tr><td>Jam Penanganan yang Dibutuhkan</td><td>{{ new_handling_hours | format_number }}</td></tr>
+            <tr><td>Tingkat Loyalitas Klien</td><td><span class="percentage">{{ new_retention_rate }}</span></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Dampak Finansial</h2>
+    <table>
+        <thead>
+            <tr><th>Metrik</th><th>Nilai</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Penghematan Tenaga Kerja Tahunan</td><td><span class="currency-idr">{{ labor_savings_idr | format_number }}</span> (<span class="currency-usd">{{ labor_savings_usd | format_number }}</span>)</td></tr>
+            <tr><td>Dampak Pendapatan dari Peningkatan Loyalitas Klien</td><td><span class="currency-usd">{{ retention_revenue_impact | format_number }}</span></td></tr>
+            <tr><td>Total Manfaat Tahunan</td><td><span class="currency-usd">{{ total_annual_savings_usd | format_number }}</span></td></tr>
+            <tr><td>Manfaat Bersih Tahun Pertama</td><td><span class="currency-usd">{{ first_year_net_usd | format_number }}</span></td></tr>
+            <tr><td>Manfaat Bersih Tahun Berikutnya</td><td><span class="currency-usd">{{ subsequent_years_net_usd | format_number }}</span></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Metrik ROI</h2>
+    <table>
+        <thead>
+            <tr><th>Metrik</th><th>Nilai</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>ROI Tahun Pertama</td><td><span class="percentage">{{ first_year_roi | format_number }}</span></td></tr>
+            <tr><td>ROI Tiga Tahun</td><td><span class="percentage">{{ three_year_roi | format_number }}</span></td></tr>
+            <tr><td>Periode Pengembalian</td><td><span class="months">{{ payback_period | format_number(1) }}</span></td></tr>
+            <tr><td>Manfaat Bersih Lima Tahun</td><td><span class="currency-usd">{{ five_year_net_benefit | format_number }}</span></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Proyeksi 5 Tahun (USD)</h2>
+    <table>
+        <thead>
+            <tr><th>Tahun</th><th>Biaya</th><th>Manfaat</th><th>Manfaat Bersih</th><th>Kumulatif Bersih</th></tr>
+        </thead>
+        <tbody>
+            {% for year_data in five_year_projection %}
+            <tr>
+                <td>{{ year_data.year }}</td>
+                <td><span class="currency-usd">{{ year_data.cost | format_number }}</span></td>
+                <td><span class="currency-usd">{{ year_data.benefit | format_number }}</span></td>
+                <td><span class="currency-usd">{{ year_data.net_benefit | format_number }}</span></td>
+                <td><span class="currency-usd">{{ year_data.cumulative_net | format_number }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Grafik Analisis</h2>
+    <img src="{{ chart_path }}" alt="Grafik Analisis ROI">
+
+    <h2>Asumsi yang Digunakan</h2>
+    <table>
+        <thead>
+            <tr><th>Parameter</th><th>Nilai</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Rata-rata gaji bulanan per staf</td><td><span class="currency-idr">{{ avg_monthly_salary | format_number(0) }}</span></td></tr>
+            <tr><td>Pengali overhead</td><td>{{ overhead_multiplier }}</td></tr>
+            <tr><td>Kurs konversi IDR ke USD</td><td>{{ usd_conversion_rate }}</td></tr>
+            <tr><td>Persentase pertanyaan yang dapat diotomatisasi</td><td><span class="percentage">{{ automation_rate }}</span></td></tr>
+            <tr><td>Persentase pengurangan staf</td><td><span class="percentage">{{ staff_reduction }}</span></td></tr>
+            <tr><td>Peningkatan loyalitas klien</td><td>{{ retention_improvement }} poin persentase</td></tr>
+            <tr><td>Peningkatan waktu penanganan</td><td><span class="percentage">{{ handling_time_improvement }}</span></td></tr>
+        </tbody>
+    </table>
+
+    <h2>Kesimpulan</h2>
+    <div class="conclusion">
+        <p>{{ conclusion_text }}</p>
+    </div>
+
+    <h2>Manfaat Tambahan</h2>
+    <ul class="benefits">
+        <li>Peningkatan kepuasan klien</li>
+        <li>Konsistensi layanan yang lebih baik</li>
+        <li>Kemampuan untuk menangani volume yang lebih tinggi selama volatilitas pasar</li>
+        <li>Kepatuhan regulasi yang lebih baik melalui dokumentasi otomatis</li>
+        <li>Wawasan data dari interaksi klien</li>
+    </ul>
+
+    <hr style="margin-top: 2cm;">
+    <p style="font-size: 9pt; color: #777;">
+        *Analisis ini dibuat menggunakan Kalkulator ROI Solusi AI Voice yang disesuaikan untuk {{ provider_company_name }}. Hasil bersifat estimasi berdasarkan data yang diberikan dan asumsi yang digunakan.*
+    </p>
+
+</body>
+</html>
