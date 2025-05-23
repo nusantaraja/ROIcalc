@@ -205,25 +205,27 @@ def get_gsheets_service(credentials_info):
 def get_next_proposal_number(service, sheet_id):
     """Mendapatkan nomor proposal berikutnya dari Google Sheet."""
     try:
-        # Asumsi: Kolom B (indeks 1) berisi nomor proposal
-        # Asumsi: Data dimulai dari baris 2 (baris 1 header)
-        # Baca kolom B saja untuk efisiensi
-        range_name = f"{LOG_SHEET_NAME}!B2:B"
-        result = service.spreadsheets().values().get(spreadsheetId=sheet_id, range=range_name).execute()
+        # Modifikasi range untuk menghindari error parsing
+        range_name = f"'{LOG_SHEET_NAME}'!B2:B"  # Tambahkan tanda kutip pada nama sheet
+        
+        result = service.spreadsheets().values().get(
+            spreadsheetId=sheet_id, 
+            range=range_name
+        ).execute()
+        
         values = result.get('values', [])
 
         today_prefix = "PROP-" + datetime.now().strftime("%y%m%d") + "-"
         last_number = 0
 
         if values:
-            # Cari nomor terakhir untuk tanggal hari ini
             for row in reversed(values):
                 if row and row[0].startswith(today_prefix):
                     try:
                         last_number = int(row[0].split('-')[-1])
                         break
                     except (IndexError, ValueError):
-                        continue # Abaikan format yang salah
+                        continue
 
         next_number = last_number + 1
         return f"{today_prefix}{next_number:03d}"
@@ -238,7 +240,9 @@ def get_next_proposal_number(service, sheet_id):
 def log_to_gsheet(service, sheet_id, log_data):
     """Mencatat data proposal ke Google Sheet."""
     try:
-        # Asumsi urutan kolom: Timestamp, Proposal No, Agent Name, Agent Email, Agent Phone, Prospect Name, Prospect Location, GDrive Link
+        # Modifikasi range untuk menghindari error parsing
+        range_name = f"'{LOG_SHEET_NAME}'!A1"  # Tambahkan tanda kutip pada nama sheet
+        
         values = [
             [
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -256,11 +260,10 @@ def log_to_gsheet(service, sheet_id, log_data):
         }
         result = service.spreadsheets().values().append(
             spreadsheetId=sheet_id,
-            range=f"{LOG_SHEET_NAME}!A1", # Append akan mencari baris kosong pertama
+            range=range_name,
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body=body).execute()
-        # st.success(f"Proposal berhasil dicatat ke Google Sheet.") # Kurangi pesan sukses
         return True
     except HttpError as error:
         st.error(f"Error saat mencatat ke Google Sheet: {error}. Pastikan Service Account memiliki akses Editor.")
