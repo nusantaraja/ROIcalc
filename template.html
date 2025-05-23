@@ -95,7 +95,7 @@
 <body>
 
     <div class="footer">
-        Analisis ROI dibuat oleh {{ creator_name }} untuk {{ prospect_name }} | {{ analysis_date }}
+        Analisis ROI dibuat oleh {{ agent_name }} untuk {{ prospect_name }} | {{ analysis_date }}
     </div>
 
     <h1>Analisis ROI Solusi AI Voice untuk {{ prospect_name }}</h1>
@@ -107,7 +107,9 @@
         <p><strong>Nama Prospek:</strong> {{ prospect_name }}</p>
         <p><strong>Lokasi Prospek:</strong> {{ prospect_location }}</p>
         <p><strong>Perusahaan Penyedia:</strong> {{ provider_company_name }}</p>
-        <p><strong>Dibuat Oleh:</strong> {{ creator_name }}</p>
+        <p><strong>Disiapkan Oleh (Agent/Marketing):</strong> {{ agent_name }}</p>
+        <p><strong>Email Agent:</strong> {{ agent_email }}</p>
+        <p><strong>No. HP/WA Agent:</strong> {{ agent_phone }}</p>
     </div>
 
     <h2>Informasi Operasional Saat Ini</h2>
@@ -184,7 +186,11 @@
     </table>
 
     <h2>Grafik Analisis</h2>
+    {% if chart_path %}
     <img src="{{ chart_path }}" alt="Grafik Analisis ROI">
+    {% else %}
+    <p style="text-align:center; color: #888;">[Grafik tidak tersedia]</p>
+    {% endif %}
 
     <h2>Asumsi yang Digunakan</h2>
     <table>
@@ -223,3 +229,4 @@
 
 </body>
 </html>
+
