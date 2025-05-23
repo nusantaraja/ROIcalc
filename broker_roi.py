@@ -188,6 +188,15 @@ def get_gdrive_service(credentials_info):
     except Exception as e:
         st.error(f"Gagal membuat service Google Drive: {e}")
         return None
+        
+# Sebelum memanggil get_next_proposal_number atau log_to_gsheet
+try:
+    # Cek apakah sheet ada
+    spreadsheet = gsheets_service.spreadsheets().get(spreadsheetId=google_sheet_id).execute()
+    sheet_names = [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
+    st.write(f"Sheet yang tersedia: {sheet_names}")
+except Exception as e:
+    st.error(f"Gagal memeriksa sheet: {e}")
 
 def get_gsheets_service(credentials_info):
     """Membuat service Google Sheets."""
