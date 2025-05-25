@@ -1,9 +1,9 @@
-streamlit
-pandas
-matplotlib
-numpy
-weasyprint
-Jinja2
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
+streamlit>=1.32.0
+matplotlib>=3.8.0
+numpy>=1.26.0
+streamlit-extras>=0.3.0
+weasyprint>=50.0 # Using 50+ for better CSS support
+
+google-api-python-client>=2.0.0
+google-auth-httplib2>=0.1.0
+google-auth-oauthlib>=0.4.1
