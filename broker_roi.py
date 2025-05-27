@@ -531,18 +531,18 @@ if calculate_button:
         st.metric(label="Peningkatan Loyalitas Klien", value=f"+{retention_improvement}% (menjadi {new_retention_rate}%)")
         st.metric(label="Penghematan Biaya Tahunan (IDR)", value=f"Rp {format_number_id(labor_savings_idr)}")
 
-    # --- Kesimpulan Teks (sama seperti sebelumnya) ---
+    # --- Kesimpulan Teks (Perbaikan: Hapus Markdown) ---
     st.subheader("📝 Kesimpulan")
-    # (Logika kesimpulan tetap sama)
+    # Hapus tanda ** dari nama prospek
     if first_year_roi != float('inf') and first_year_roi > 50 and payback_period < 18:
-        conclusion_text = f"Implementasi Solusi AI Voice untuk **{prospect_name}** sangat direkomendasikan. Dengan ROI tahun pertama **{format_number_id(first_year_roi)}%** dan periode pengembalian hanya **{format_number_id(payback_period, 1)} bulan**, investasi ini menawarkan nilai finansial yang sangat signifikan dan cepat."
+        conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} sangat direkomendasikan. Dengan ROI tahun pertama {format_number_id(first_year_roi)}% dan periode pengembalian hanya {format_number_id(payback_period, 1)} bulan, investasi ini menawarkan nilai finansial yang sangat signifikan dan cepat."
     elif first_year_roi != float('inf') and first_year_roi > 0:
-        conclusion_text = f"Implementasi Solusi AI Voice untuk **{prospect_name}** direkomendasikan. ROI tahun pertama sebesar **{format_number_id(first_year_roi)}%** dan periode pengembalian **{format_number_id(payback_period, 1)} bulan** menunjukkan potensi pengembalian investasi yang solid dalam jangka menengah."
+        conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} direkomendasikan. ROI tahun pertama sebesar {format_number_id(first_year_roi)}% dan periode pengembalian {format_number_id(payback_period, 1)} bulan menunjukkan potensi pengembalian investasi yang solid dalam jangka menengah."
     elif three_year_roi != float('inf') and three_year_roi > 0:
-         conclusion_text = f"Implementasi Solusi AI Voice untuk **{prospect_name}** patut dipertimbangkan. Meskipun ROI tahun pertama mungkin belum positif ({format_number_id(first_year_roi)}%), ROI tiga tahun sebesar **{format_number_id(three_year_roi)}%** mengindikasikan potensi keuntungan jangka panjang yang menarik."
+         conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} patut dipertimbangkan. Meskipun ROI tahun pertama mungkin belum positif ({format_number_id(first_year_roi)}%), ROI tiga tahun sebesar {format_number_id(three_year_roi)}% mengindikasikan potensi keuntungan jangka panjang yang menarik."
     else:
-        conclusion_text = f"Berdasarkan data dan asumsi saat ini, ROI untuk implementasi Solusi AI Voice bagi **{prospect_name}** terlihat kurang menarik ({format_number_id(first_year_roi)}% ROI tahun pertama). Perlu evaluasi lebih lanjut terhadap asumsi atau potensi manfaat lain sebelum melanjutkan."
-    st.markdown(conclusion_text)
+        conclusion_text = f"Berdasarkan data dan asumsi saat ini, ROI untuk implementasi Solusi AI Voice bagi {prospect_name} terlihat kurang menarik ({format_number_id(first_year_roi)}% ROI tahun pertama). Perlu evaluasi lebih lanjut terhadap asumsi atau potensi manfaat lain sebelum melanjutkan."
+    st.markdown(conclusion_text) # Tetap gunakan markdown untuk tampilan di Streamlit
 
     # --- Persiapan Data untuk PDF & Log ---
     current_time = datetime.now()
@@ -589,7 +589,7 @@ if calculate_button:
         'staff_reduction': staff_reduction,
         'retention_improvement': retention_improvement,
         'handling_time_improvement': handling_time_improvement,
-        'conclusion_text': conclusion_text
+        'conclusion_text': conclusion_text # Kirim teks kesimpulan yang sudah bersih ke PDF
     }
 
     # --- Generate PDF --- 
