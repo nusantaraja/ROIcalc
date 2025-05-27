@@ -288,11 +288,11 @@ if credentials_info and google_sheet_id_secret:
 with st.sidebar:
     st.header("⚙️ Input Data")
 
-    # Informasi Agent/Marketing
-    st.subheader("Informasi Agent/Marketing")
-    agent_name = st.text_input("Nama Agent/Marketing", "")
-    agent_email = st.text_input("Email Agent/Marketing", "")
-    agent_phone = st.text_input("No. HP/WA Agent/Marketing", "")
+    # Informasi Konsultan
+    st.subheader("Informasi Konsultan")
+    agent_name = st.text_input("Nama Konsultan", "")
+    agent_email = st.text_input("Email Konsultan", "")
+    agent_phone = st.text_input("No. HP/WA Konsultan", "")
 
     # Informasi Proposal & Prospek
     st.subheader("Informasi Proposal & Prospek")
@@ -351,7 +351,7 @@ if calculate_button:
 
     # Validasi input dasar
     if not agent_name or not agent_email or not agent_phone:
-        st.sidebar.error("Harap isi semua informasi Agent/Marketing.")
+        st.sidebar.error("Harap isi semua informasi Konsultan.")
         st.stop()
     if not prospect_name:
         st.sidebar.error("Harap isi Nama Prospek.")
