@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from datetime import datetime
-import locale
+import locale # Tetap import untuk jaga-jaga jika ada penggunaan lain, tapi format utama manual
 import io
 import base64
 import json
@@ -32,35 +32,30 @@ st.set_page_config(layout="wide", page_title="Kalkulator ROI AI Voice Broker")
 PROVIDER_COMPANY_NAME = "MEDIA AI SOLUSI, group of PT. EKUITAS MEDIA INVESTAMA"
 LOG_SHEET_NAME = "Log Proposal" # Nama sheet/tab di dalam Google Sheet
 
-# Set locale ke Indonesian (Hapus warning jika gagal)
-try:
-    locale.setlocale(locale.LC_ALL, 'id_ID.UTF-8')
-except locale.Error:
-    try:
-        locale.setlocale(locale.LC_ALL, 'id_ID')
-    except locale.Error:
-        pass # Abaikan jika locale tidak bisa diset
-
 # --- Fungsi Bantuan ---
 def format_number_id(value, precision=2):
-    """Format angka ke format Indonesia.
-    Handles potential locale errors gracefully.
+    """Format angka ke format Indonesia (manual, tanpa locale).
+    Memastikan titik sebagai pemisah ribuan dan koma sebagai desimal.
     """
     try:
         if isinstance(value, (int, float)):
-            if value == float('inf') or value == float('-inf'):
+            if value == float("inf") or value == float("-inf"):
                 return "N/A"
-            # Coba format dengan locale
-            try:
-                format_str = f"%.{precision}f"
-                formatted_value = locale.format_string(format_str, value, grouping=True)
-                # Ganti pemisah desimal default locale jika perlu (misal, jika locale id_ID pakai titik)
-                if locale.localeconv()['decimal_point'] == '.':
-                     formatted_value = formatted_value.replace('.', '#TEMP#').replace(',', '.').replace('#TEMP#', ',')
-                return formatted_value
-            except (locale.Error, KeyError):
-                 # Fallback jika locale gagal: format manual
-                 return f"{value:,.{precision}f}".replace(',', '#TEMP#').replace('.', ',').replace('#TEMP#', '.')
+
+            # Format angka dengan koma ribuan dan titik desimal (standar Python/US)
+            formatted_str = f"{value:,.{precision}f}"
+
+            # Pisahkan bagian integer dan desimal
+            parts = formatted_str.split(".")
+            int_part = parts[0]
+            dec_part = parts[1] if len(parts) > 1 else ""
+
+            # Ganti koma ribuan dengan titik
+            int_part_swapped = int_part.replace(",", ".")
+
+            # Gabungkan kembali dengan koma sebagai pemisah desimal
+            return f"{int_part_swapped},{dec_part}"
+
         return str(value) # Kembalikan sebagai string jika bukan angka
     except (TypeError, ValueError):
         return str(value)
@@ -76,14 +71,14 @@ def generate_pdf(data):
 
         env = Environment(
             loader=FileSystemLoader(script_dir),
-            autoescape=select_autoescape(['html'])
+            autoescape=select_autoescape(["html"])
         )
-        env.filters['format_number'] = format_number_id
-        template = env.get_template('template.html')
+        env.filters["format_number"] = format_number_id # Pastikan filter menggunakan fungsi baru
+        template = env.get_template("template.html")
         html_out = template.render(data)
 
-        if 'chart_path' not in data or not data['chart_path'].startswith('data:image'):
-             data['chart_path'] = ''
+        if "chart_path" not in data or not data["chart_path"].startswith("data:image"):
+             data["chart_path"] = ""
 
         pdf_bytes = HTML(string=html_out, base_url=script_dir).write_pdf()
         return pdf_bytes
@@ -94,7 +89,7 @@ def generate_pdf(data):
 
 # --- Fungsi Google Drive & Sheets (Auth terpusat) ---
 
-SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets']
+SCOPES = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets"]
 
 def get_google_credentials(secrets):
     """Mendapatkan kredensial Service Account dari Streamlit Secrets (Base64 atau JSON) atau file upload."""
@@ -103,18 +98,16 @@ def get_google_credentials(secrets):
     show_api_settings = True # Default tampilkan pengaturan jika ada masalah
 
     # Prioritas 1: Coba dari Secret Base64 (misal, google_service_account_b64)
-    if 'google_service_account_b64' in secrets:
+    if "google_service_account_b64" in secrets:
         try:
-            b64_str = secrets['google_service_account_b64']
+            b64_str = secrets["google_service_account_b64"]
             if isinstance(b64_str, str) and b64_str:
                 decoded_bytes = base64.b64decode(b64_str)
-                decoded_str = decoded_bytes.decode('utf-8')
+                decoded_str = decoded_bytes.decode("utf-8")
                 credentials_info = json.loads(decoded_str)
                 source = "Streamlit Secrets (Base64)"
                 show_api_settings = False # Sembunyikan jika sukses dari secrets
             else:
-                # Jangan tampilkan warning ke user marketing
-                # st.sidebar.warning("Secret 'google_service_account_b64' ditemukan tapi kosong atau bukan string.")
                 pass
         except base64.binascii.Error:
             st.sidebar.error("Gagal decode Base64 dari secret 'google_service_account_b64'. Pastikan string Base64 valid.")
@@ -127,16 +120,14 @@ def get_google_credentials(secrets):
             return None, "Error", show_api_settings
 
     # Prioritas 2: Coba dari Secret JSON/TOML biasa (misal, google_service_account)
-    if credentials_info is None and 'google_service_account' in secrets:
+    if credentials_info is None and "google_service_account" in secrets:
         try:
-            secret_content = secrets['google_service_account']
+            secret_content = secrets["google_service_account"]
             if isinstance(secret_content, str):
                 credentials_info = json.loads(secret_content)
             elif isinstance(secret_content, dict) or isinstance(secret_content, toml.TomlDecoder):
                  credentials_info = dict(secret_content)
             else:
-                 # Jangan tampilkan warning ke user marketing
-                 # st.sidebar.warning("Format secret 'google_service_account' tidak dikenali (harus string JSON atau TOML).")
                  pass
 
             if credentials_info: # Hanya jika berhasil di-parse
@@ -144,17 +135,13 @@ def get_google_credentials(secrets):
                 show_api_settings = False # Sembunyikan jika sukses dari secrets
 
         except json.JSONDecodeError:
-            # Jangan tampilkan warning ke user marketing
-            # st.sidebar.warning("Gagal membaca secret 'google_service_account' sebagai JSON/TOML. Mencoba file upload...")
             pass
         except Exception as e:
-            # Jangan tampilkan warning ke user marketing
-            # st.sidebar.warning(f"Error membaca secret 'google_service_account': {e}. Mencoba file upload...")
             pass
 
     # Prioritas 3: Fallback ke File Upload (Hanya tampil jika show_api_settings masih True)
     if credentials_info is None and show_api_settings:
-        uploaded_key_file = st.sidebar.file_uploader("Unggah File Kunci JSON Service Account", type=['json'], help="Jika tidak menggunakan Streamlit Secrets. Unduh dari Google Cloud Console.")
+        uploaded_key_file = st.sidebar.file_uploader("Unggah File Kunci JSON Service Account", type=["json"], help="Jika tidak menggunakan Streamlit Secrets. Unduh dari Google Cloud Console.")
         if uploaded_key_file is not None:
             try:
                 stringio = io.StringIO(uploaded_key_file.getvalue().decode("utf-8"))
@@ -177,7 +164,6 @@ def get_google_credentials(secrets):
             return None, "Error", True
         return credentials_info, source, show_api_settings
     else:
-        # Jika tidak ada secret dan tidak ada file diupload
         if source == "Not Found" and show_api_settings:
              st.sidebar.info("Kredensial Google Service Account tidak ditemukan.")
         return None, "Not Found", show_api_settings
@@ -186,22 +172,18 @@ def get_gdrive_service(credentials_info):
     """Membuat service Google Drive. Return None on failure."""
     try:
         credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
-        service = build('drive', 'v3', credentials=credentials)
+        service = build("drive", "v3", credentials=credentials)
         return service
     except Exception:
-        # Jangan tampilkan error ke user marketing
-        # st.error(f"Gagal membuat service Google Drive: {e}")
         return None
 
 def get_gsheets_service(credentials_info):
     """Membuat service Google Sheets. Return None on failure."""
     try:
         credentials = service_account.Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
-        service = build('sheets', 'v4', credentials=credentials)
+        service = build("sheets", "v4", credentials=credentials)
         return service
     except Exception:
-        # Jangan tampilkan error ke user marketing
-        # st.error(f"Gagal membuat service Google Sheets: {e}")
         return None
 
 def get_next_proposal_number(service, sheet_id):
@@ -209,22 +191,20 @@ def get_next_proposal_number(service, sheet_id):
     try:
         range_name = f"{LOG_SHEET_NAME}!B2:B"
         result = service.spreadsheets().values().get(spreadsheetId=sheet_id, range=range_name).execute()
-        values = result.get('values', [])
+        values = result.get("values", [])
         today_prefix = "PROP-" + datetime.now().strftime("%y%m%d") + "-"
         last_number = 0
         if values:
             for row in reversed(values):
                 if row and row[0].startswith(today_prefix):
                     try:
-                        last_number = int(row[0].split('-')[-1])
+                        last_number = int(row[0].split("-")[-1])
                         break
                     except (IndexError, ValueError):
                         continue
         next_number = last_number + 1
         return f"{today_prefix}{next_number:03d}"
     except Exception:
-        # Jangan tampilkan warning ke user marketing
-        # st.warning(f"Error saat membaca Google Sheet untuk nomor proposal: {error}. Menggunakan format default.")
         return "PROP-" + datetime.now().strftime("%y%m%d") + "-XXX" # Indikasi error
 
 def log_to_gsheet(service, sheet_id, log_data):
@@ -233,16 +213,16 @@ def log_to_gsheet(service, sheet_id, log_data):
         values = [
             [
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                log_data.get('proposal_number', ''),
-                log_data.get('agent_name', ''),
-                log_data.get('agent_email', ''),
-                log_data.get('agent_phone', ''),
-                log_data.get('prospect_name', ''),
-                log_data.get('prospect_location', ''),
-                log_data.get('gdrive_link', '')
+                log_data.get("proposal_number", ""),
+                log_data.get("agent_name", ""),
+                log_data.get("agent_email", ""),
+                log_data.get("agent_phone", ""),
+                log_data.get("prospect_name", ""),
+                log_data.get("prospect_location", ""),
+                log_data.get("gdrive_link", "")
             ]
         ]
-        body = {'values': values}
+        body = {"values": values}
         result = service.spreadsheets().values().append(
             spreadsheetId=sheet_id,
             range=f"{LOG_SHEET_NAME}!A1",
@@ -251,59 +231,39 @@ def log_to_gsheet(service, sheet_id, log_data):
             body=body).execute()
         return True
     except Exception:
-        # Jangan tampilkan error ke user marketing
-        # st.error(f"Error saat mencatat ke Google Sheet: {error}. Pastikan Service Account memiliki akses Editor.")
         return False
 
 def find_or_create_folder(service, folder_name, parent_folder_id):
     """Mencari/membuat folder di Google Drive. Return folder ID or None."""
     try:
-        safe_folder_name = "".join(c for c in folder_name if c.isalnum() or c in (' ', '_', '-')).strip()
+        safe_folder_name = "".join(c for c in folder_name if c.isalnum() or c in (" ", "_", "-")).strip()
         if not safe_folder_name:
              safe_folder_name = "Prospek Tanpa Nama"
         query = f"name='{safe_folder_name}' and mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
-        response = service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
-        folders = response.get('files', [])
+        response = service.files().list(q=query, spaces="drive", fields="files(id, name)").execute()
+        folders = response.get("files", [])
         if folders:
-            return folders[0].get('id')
+            return folders[0].get("id")
         else:
-            # Jangan tampilkan info ke user marketing
-            # st.info(f"Membuat folder GDrive: '{safe_folder_name}'...")
-            file_metadata = {'name': safe_folder_name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_folder_id]}
-            folder = service.files().create(body=file_metadata, fields='id').execute()
-            # Jangan tampilkan sukses ke user marketing
-            # st.success(f"Folder '{safe_folder_name}' berhasil dibuat.")
-            return folder.get('id')
+            file_metadata = {"name": safe_folder_name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_folder_id]}
+            folder = service.files().create(body=file_metadata, fields="id").execute()
+            return folder.get("id")
     except Exception:
-        # Jangan tampilkan error ke user marketing
-        # st.error(f"Error GDrive (Folder): {error}. Pastikan Service Account memiliki akses Editor ke folder induk.")
         return None
 
 def upload_to_drive(service, pdf_bytes, filename, prospect_folder_id):
     """Mengunggah file PDF ke Google Drive. Return link or None."""
     gdrive_link = None
     try:
-        file_metadata = {'name': filename, 'parents': [prospect_folder_id]}
-        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype='application/pdf', resumable=True)
-        request = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink')
+        file_metadata = {"name": filename, "parents": [prospect_folder_id]}
+        media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype="application/pdf", resumable=True)
+        request = service.files().create(body=file_metadata, media_body=media, fields="id, webViewLink")
         response = None
-        # Jangan tampilkan progress bar ke user marketing
-        # progress_bar = st.progress(0, text="Mengunggah ke Google Drive...")
         while response is None:
             status, response = request.next_chunk()
-            # if status:
-            #     progress = int(status.progress() * 100)
-            #     progress_bar.progress(progress, text=f"Mengunggah... {progress}%")
-        # progress_bar.empty()
-        file_id = response.get('id')
-        gdrive_link = response.get('webViewLink')
-        # Jangan tampilkan sukses/link ke user marketing
-        # st.success(f"File '{filename}' berhasil diunggah.")
-        # st.markdown(f"[Lihat File di Google Drive]({gdrive_link})", unsafe_allow_html=True)
+        file_id = response.get("id")
+        gdrive_link = response.get("webViewLink")
     except Exception:
-        # Jangan tampilkan error ke user marketing
-        # st.error(f"Error GDrive (Upload): {error}")
-        # if 'progress_bar' in locals() and hasattr(progress_bar, 'empty'): progress_bar.empty()
         pass
     return gdrive_link
 
@@ -323,8 +283,6 @@ if credentials_info and google_sheet_id_secret:
     gsheets_service = get_gsheets_service(credentials_info)
     if gsheets_service:
         next_proposal_num = get_next_proposal_number(gsheets_service, google_sheet_id_secret)
-    # else: # Jangan tampilkan warning ke user marketing
-        # st.sidebar.warning("Gagal terhubung ke Google Sheets untuk mendapatkan nomor proposal.")
 
 # --- Input Data --- 
 with st.sidebar:
@@ -372,17 +330,14 @@ with st.sidebar:
     google_sheet_id_input = None
     if show_api_settings_sidebar:
         st.subheader("☁️ Pengaturan Google API (Manual)")
-        # Tampilkan input ID Folder hanya jika tidak ada di secrets
         if not gdrive_parent_folder_id_secret:
             gdrive_parent_folder_id_input = st.text_input("ID Folder Induk Google Drive", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
         else:
             st.info("ID Folder Induk GDrive ditemukan di Streamlit Secrets.")
-        # Tampilkan input ID Sheet hanya jika tidak ada di secrets
         if not google_sheet_id_secret:
             google_sheet_id_input = st.text_input("ID Google Sheet (untuk Log)", "", help="Masukkan jika tidak diset di Streamlit Secrets.")
         else:
             st.info("ID Google Sheet ditemukan di Streamlit Secrets.")
-        # Opsi upload kredensial sudah ditangani di get_google_credentials
 
     # Tombol Kalkulasi (Label diubah)
     st.divider()
@@ -409,15 +364,8 @@ if calculate_button:
     if credentials_info:
         if gdrive_parent_folder_id:
             trigger_gdrive_upload = True
-        # else: # Jangan tampilkan warning ke user marketing
-            # st.warning("ID Folder Induk Google Drive tidak ditemukan. PDF tidak akan diunggah.")
-
         if google_sheet_id:
             trigger_gsheet_log = True
-        # else: # Jangan tampilkan warning ke user marketing
-            # st.warning("ID Google Sheet tidak ditemukan. Proposal tidak akan dicatat.")
-    # elif cred_source != "Error": # Jangan tampilkan warning ke user marketing
-        # st.warning("Kredensial Google tidak ditemukan. PDF tidak akan diunggah atau dicatat.")
 
     st.header("📈 Hasil Analisis ROI")
     with st.spinner("Melakukan kalkulasi ROI..."):
@@ -452,12 +400,12 @@ if calculate_button:
         subsequent_years_net_usd = total_annual_savings_usd - annual_subscription
         total_first_year_investment = implementation_cost + annual_subscription
         total_three_year_investment = implementation_cost + annual_subscription * 3
-        first_year_roi = (first_year_net_usd / total_first_year_investment * 100) if total_first_year_investment > 0 else float('inf')
+        first_year_roi = (first_year_net_usd / total_first_year_investment * 100) if total_first_year_investment > 0 else float("inf")
         three_year_net_benefit = first_year_net_usd + subsequent_years_net_usd * 2
-        three_year_roi = (three_year_net_benefit / total_three_year_investment * 100) if total_three_year_investment > 0 else float('inf')
+        three_year_roi = (three_year_net_benefit / total_three_year_investment * 100) if total_three_year_investment > 0 else float("inf")
         monthly_savings_usd = total_annual_savings_usd / 12 if total_annual_savings_usd else 0
         total_investment_usd = implementation_cost + annual_subscription
-        payback_period = (total_investment_usd / monthly_savings_usd) if monthly_savings_usd > 0 else float('inf')
+        payback_period = (total_investment_usd / monthly_savings_usd) if monthly_savings_usd > 0 else float("inf")
         years = range(1, 6)
         costs = [(implementation_cost + annual_subscription) if year == 1 else annual_subscription for year in years]
         benefits = [total_annual_savings_usd for _ in years]
@@ -467,11 +415,11 @@ if calculate_button:
         five_year_projection_data = []
         for i in range(len(years)):
             five_year_projection_data.append({
-                'year': years[i],
-                'cost': costs[i],
-                'benefit': benefits[i],
-                'net_benefit': net_benefits[i],
-                'cumulative_net': cumulative_net[i]
+                "year": years[i],
+                "cost": costs[i],
+                "benefit": benefits[i],
+                "net_benefit": net_benefits[i],
+                "cumulative_net": cumulative_net[i]
             })
 
     # --- Generate Chart (sama seperti sebelumnya) ---
@@ -480,33 +428,33 @@ if calculate_button:
     chart_data_uri = None
     try:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-        plt.style.use('seaborn-v0_8-whitegrid')
-        labels_cost = ['Saat Ini', 'Dengan AI Voice']
+        plt.style.use("seaborn-v0_8-whitegrid")
+        labels_cost = ["Saat Ini", "Dengan AI Voice"]
         cs_costs_idr = [current_annual_labor_cost_idr, new_annual_labor_cost_idr]
-        colors_cost = ['#3A86FF', '#8338EC']
+        colors_cost = ["#3A86FF", "#8338EC"]
         bars = ax1.bar(labels_cost, cs_costs_idr, color=colors_cost)
-        ax1.set_title('Perbandingan Biaya Tahunan (IDR)', fontsize=12)
-        ax1.set_ylabel('Biaya (IDR)', fontsize=10)
-        ax1.tick_params(axis='x', labelsize=10)
-        ax1.tick_params(axis='y', labelsize=10)
+        ax1.set_title("Perbandingan Biaya Tahunan (IDR)", fontsize=12)
+        ax1.set_ylabel("Biaya (IDR)", fontsize=10)
+        ax1.tick_params(axis="x", labelsize=10)
+        ax1.tick_params(axis="y", labelsize=10)
         ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: format_number_id(x, 0)))
         for bar in bars:
             yval = bar.get_height()
-            ax1.text(bar.get_x() + bar.get_width()/2.0, yval * 1.01, f'IDR {format_number_id(yval, 0)}', va='bottom', ha='center', fontsize=9)
-        ax2.plot(years, cumulative_net, marker='o', linewidth=2, color='#FF006E', label='Manfaat Bersih Kumulatif')
-        ax2.set_title('Manfaat Bersih Kumulatif 5 Tahun (USD)', fontsize=12)
-        ax2.set_xlabel('Tahun', fontsize=10)
-        ax2.set_ylabel('USD', fontsize=10)
-        ax2.grid(True, linestyle='--', alpha=0.6)
+            ax1.text(bar.get_x() + bar.get_width()/2.0, yval * 1.01, f"IDR {format_number_id(yval, 0)}", va="bottom", ha="center", fontsize=9)
+        ax2.plot(years, cumulative_net, marker="o", linewidth=2, color="#FF006E", label="Manfaat Bersih Kumulatif")
+        ax2.set_title("Manfaat Bersih Kumulatif 5 Tahun (USD)", fontsize=12)
+        ax2.set_xlabel("Tahun", fontsize=10)
+        ax2.set_ylabel("USD", fontsize=10)
+        ax2.grid(True, linestyle="--", alpha=0.6)
         ax2.set_xticks(years)
-        ax2.tick_params(axis='x', labelsize=10)
-        ax2.tick_params(axis='y', labelsize=10)
-        ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${format_number_id(x, 0)}'))
-        ax2.axhline(0, color='grey', linewidth=0.8, linestyle='--')
+        ax2.tick_params(axis="x", labelsize=10)
+        ax2.tick_params(axis="y", labelsize=10)
+        ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"$ {format_number_id(x, 0)}"))
+        ax2.axhline(0, color="grey", linewidth=0.8, linestyle="--")
         for i, value in enumerate(cumulative_net):
-             ax2.text(years[i], value, f'${format_number_id(value, 0)}', ha='center', va='bottom', fontsize=9)
+             ax2.text(years[i], value, f"$ {format_number_id(value, 0)}", ha="center", va="bottom", fontsize=9)
         plt.tight_layout(pad=2.0)
-        plt.savefig(chart_buffer, format='png', dpi=300, bbox_inches='tight')
+        plt.savefig(chart_buffer, format="png", dpi=300, bbox_inches="tight")
         plt.close(fig)
         chart_buffer.seek(0)
         chart_base64 = base64.b64encode(chart_buffer.read()).decode()
@@ -521,7 +469,7 @@ if calculate_button:
     with col1:
         st.metric(label="ROI Tahun Pertama", value=f"{format_number_id(first_year_roi)}%")
         st.metric(label="ROI Tiga Tahun", value=f"{format_number_id(three_year_roi)}%")
-        st.metric(label="Periode Pengembalian", value=f"{format_number_id(payback_period, 1)} bulan" if payback_period != float('inf') else "Tidak Tercapai")
+        st.metric(label="Periode Pengembalian", value=f"{format_number_id(payback_period, 1)} bulan" if payback_period != float("inf") else "Tidak Tercapai")
     with col2:
         st.metric(label="Total Penghematan Tahunan (USD)", value=f"$ {format_number_id(total_annual_savings_usd)}")
         st.metric(label="Manfaat Bersih 5 Tahun (USD)", value=f"$ {format_number_id(five_year_net_benefit)}")
@@ -533,63 +481,60 @@ if calculate_button:
 
     # --- Kesimpulan Teks (Perbaikan: Hapus Markdown) ---
     st.subheader("📝 Kesimpulan")
-    # Hapus tanda ** dari nama prospek
-    if first_year_roi != float('inf') and first_year_roi > 50 and payback_period < 18:
+    if first_year_roi != float("inf") and first_year_roi > 50 and payback_period < 18:
         conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} sangat direkomendasikan. Dengan ROI tahun pertama {format_number_id(first_year_roi)}% dan periode pengembalian hanya {format_number_id(payback_period, 1)} bulan, investasi ini menawarkan nilai finansial yang sangat signifikan dan cepat."
-    elif first_year_roi != float('inf') and first_year_roi > 0:
+    elif first_year_roi != float("inf") and first_year_roi > 0:
         conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} direkomendasikan. ROI tahun pertama sebesar {format_number_id(first_year_roi)}% dan periode pengembalian {format_number_id(payback_period, 1)} bulan menunjukkan potensi pengembalian investasi yang solid dalam jangka menengah."
-    elif three_year_roi != float('inf') and three_year_roi > 0:
+    elif three_year_roi != float("inf") and three_year_roi > 0:
          conclusion_text = f"Implementasi Solusi AI Voice untuk {prospect_name} patut dipertimbangkan. Meskipun ROI tahun pertama mungkin belum positif ({format_number_id(first_year_roi)}%), ROI tiga tahun sebesar {format_number_id(three_year_roi)}% mengindikasikan potensi keuntungan jangka panjang yang menarik."
     else:
         conclusion_text = f"Berdasarkan data dan asumsi saat ini, ROI untuk implementasi Solusi AI Voice bagi {prospect_name} terlihat kurang menarik ({format_number_id(first_year_roi)}% ROI tahun pertama). Perlu evaluasi lebih lanjut terhadap asumsi atau potensi manfaat lain sebelum melanjutkan."
-    st.markdown(conclusion_text) # Tetap gunakan markdown untuk tampilan di Streamlit
+    st.markdown(conclusion_text)
 
     # --- Persiapan Data untuk PDF & Log ---
     current_time = datetime.now()
-    # Gunakan nomor proposal yang didapat dari GSheet atau default
     final_proposal_number = next_proposal_num
     pdf_data = {
-        'proposal_number': final_proposal_number,
-        'analysis_date': current_time.strftime('%d %B %Y'),
-        'prospect_name': prospect_name,
-        'prospect_location': prospect_location,
-        'provider_company_name': PROVIDER_COMPANY_NAME,
-        'agent_name': agent_name,
-        'agent_email': agent_email,
-        'agent_phone': agent_phone,
-        # Data kalkulasi lainnya (sama seperti sebelumnya)
-        'cs_staff': cs_staff,
-        'current_annual_labor_cost_idr': current_annual_labor_cost_idr,
-        'current_annual_labor_cost_usd': current_annual_labor_cost_usd,
-        'current_inquiries_per_year': current_inquiries_per_year,
-        'current_handling_hours': current_handling_hours,
-        'current_retention_rate': current_retention_rate,
-        'new_staff_count': new_staff_count,
-        'new_annual_labor_cost_idr': new_annual_labor_cost_idr,
-        'new_annual_labor_cost_usd': new_annual_labor_cost_usd,
-        'automated_inquiries': automated_inquiries,
-        'automation_rate': automation_rate,
-        'new_handling_hours': new_handling_hours,
-        'new_retention_rate': new_retention_rate,
-        'labor_savings_idr': labor_savings_idr,
-        'labor_savings_usd': labor_savings_usd,
-        'retention_revenue_impact': retention_revenue_impact,
-        'total_annual_savings_usd': total_annual_savings_usd,
-        'first_year_net_usd': first_year_net_usd,
-        'subsequent_years_net_usd': subsequent_years_net_usd,
-        'first_year_roi': first_year_roi,
-        'three_year_roi': three_year_roi,
-        'payback_period': payback_period,
-        'five_year_net_benefit': five_year_net_benefit,
-        'five_year_projection': five_year_projection_data,
-        'chart_path': chart_data_uri if chart_data_uri else '',
-        'avg_monthly_salary': avg_monthly_salary,
-        'overhead_multiplier': overhead_multiplier,
-        'usd_conversion_rate': usd_conversion_rate,
-        'staff_reduction': staff_reduction,
-        'retention_improvement': retention_improvement,
-        'handling_time_improvement': handling_time_improvement,
-        'conclusion_text': conclusion_text # Kirim teks kesimpulan yang sudah bersih ke PDF
+        "proposal_number": final_proposal_number,
+        "analysis_date": current_time.strftime("%d %B %Y"),
+        "prospect_name": prospect_name,
+        "prospect_location": prospect_location,
+        "provider_company_name": PROVIDER_COMPANY_NAME,
+        "agent_name": agent_name,
+        "agent_email": agent_email,
+        "agent_phone": agent_phone,
+        "cs_staff": cs_staff,
+        "current_annual_labor_cost_idr": current_annual_labor_cost_idr,
+        "current_annual_labor_cost_usd": current_annual_labor_cost_usd,
+        "current_inquiries_per_year": current_inquiries_per_year,
+        "current_handling_hours": current_handling_hours,
+        "current_retention_rate": current_retention_rate,
+        "new_staff_count": new_staff_count,
+        "new_annual_labor_cost_idr": new_annual_labor_cost_idr,
+        "new_annual_labor_cost_usd": new_annual_labor_cost_usd,
+        "automated_inquiries": automated_inquiries,
+        "automation_rate": automation_rate,
+        "new_handling_hours": new_handling_hours,
+        "new_retention_rate": new_retention_rate,
+        "labor_savings_idr": labor_savings_idr,
+        "labor_savings_usd": labor_savings_usd,
+        "retention_revenue_impact": retention_revenue_impact,
+        "total_annual_savings_usd": total_annual_savings_usd,
+        "first_year_net_usd": first_year_net_usd,
+        "subsequent_years_net_usd": subsequent_years_net_usd,
+        "first_year_roi": first_year_roi,
+        "three_year_roi": three_year_roi,
+        "payback_period": payback_period,
+        "five_year_net_benefit": five_year_net_benefit,
+        "five_year_projection": five_year_projection_data,
+        "chart_path": chart_data_uri if chart_data_uri else "",
+        "avg_monthly_salary": avg_monthly_salary,
+        "overhead_multiplier": overhead_multiplier,
+        "usd_conversion_rate": usd_conversion_rate,
+        "staff_reduction": staff_reduction,
+        "retention_improvement": retention_improvement,
+        "handling_time_improvement": handling_time_improvement,
+        "conclusion_text": conclusion_text
     }
 
     # --- Generate PDF --- 
@@ -599,9 +544,9 @@ if calculate_button:
         pdf_bytes = generate_pdf(pdf_data)
 
     if pdf_bytes:
-        safe_prospect_name = "".join(c for c in prospect_name if c.isalnum() or c in (' ', '_', '-')).strip()
-        safe_location = "".join(c for c in prospect_location if c.isalnum() or c in (' ', '_', '-')).strip()
-        pdf_filename = f"{final_proposal_number} {safe_prospect_name} {safe_location}.pdf" # Gunakan nomor proposal otomatis
+        safe_prospect_name = "".join(c for c in prospect_name if c.isalnum() or c in (" ", "_", "-")).strip()
+        safe_location = "".join(c for c in prospect_location if c.isalnum() or c in (" ", "_", "-")).strip()
+        pdf_filename = f"{final_proposal_number} {safe_prospect_name} {safe_location}.pdf"
 
         st.download_button(
             label="📥 Unduh PDF",
@@ -609,7 +554,7 @@ if calculate_button:
             file_name=pdf_filename,
             mime="application/pdf"
         )
-        st.success(f"Proposal PDF ({pdf_filename}) siap diunduh.") # Pesan sukses utama untuk user
+        st.success(f"Proposal PDF ({pdf_filename}) siap diunduh.")
 
         # --- Operasi Backend (GDrive & GSheet) - Dijalankan secara senyap ---
         gdrive_pdf_link = None
@@ -618,37 +563,24 @@ if calculate_button:
             if gdrive_service:
                 prospect_folder_id = find_or_create_folder(gdrive_service, safe_prospect_name, gdrive_parent_folder_id)
                 if prospect_folder_id:
-                    # Upload berjalan senyap, hanya mengembalikan link jika sukses
                     gdrive_pdf_link = upload_to_drive(gdrive_service, pdf_bytes, pdf_filename, prospect_folder_id)
-                # else: # Jangan tampilkan error folder ke user marketing
-                    # st.error("Gagal mendapatkan/membuat folder prospek GDrive. File tidak diunggah.")
-            # else: # Jangan tampilkan error koneksi ke user marketing
-                 # st.error("Gagal terhubung ke Google Drive. File tidak diunggah.")
 
         # --- Log ke Google Sheet (Dijalankan secara senyap) --- 
         if trigger_gsheet_log and credentials_info:
             gsheet_service = get_gsheets_service(credentials_info)
             if gsheet_service:
                 log_data = {
-                    'proposal_number': final_proposal_number,
-                    'agent_name': agent_name,
-                    'agent_email': agent_email,
-                    'agent_phone': agent_phone,
-                    'prospect_name': prospect_name,
-                    'prospect_location': prospect_location,
-                    'gdrive_link': gdrive_pdf_link or "Upload Gagal/Tidak Dilakukan"
+                    "proposal_number": final_proposal_number,
+                    "agent_name": agent_name,
+                    "agent_email": agent_email,
+                    "agent_phone": agent_phone,
+                    "prospect_name": prospect_name,
+                    "prospect_location": prospect_location,
+                    "gdrive_link": gdrive_pdf_link or "Upload Gagal/Tidak Dilakukan"
                 }
-                # Pencatatan berjalan senyap
                 log_success = log_to_gsheet(gsheet_service, google_sheet_id, log_data)
-                # if log_success: # Jangan tampilkan sukses ke user marketing
-                    # st.success("Proposal berhasil dicatat ke Google Sheet.")
-            # else: # Jangan tampilkan error koneksi ke user marketing
-                # st.error("Gagal terhubung ke Google Sheets. Proposal tidak dicatat.")
-        # elif trigger_gsheet_log and not credentials_info: # Jangan tampilkan warning ke user marketing
-             # st.warning("Kredensial Google tidak valid/ditemukan. Proposal tidak dicatat ke Google Sheet.")
 
     else:
-        # Error pembuatan PDF sudah ditampilkan di dalam fungsi generate_pdf
         pass
 
 else:
