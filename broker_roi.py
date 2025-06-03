@@ -217,7 +217,7 @@ def find_or_create_folder(service, folder_name, parent_folder_id):
         if not safe_folder_name:
              safe_folder_name = "Prospek Tanpa Nama"
         # Perbaikan: Menggunakan kutip tunggal untuk nilai string dalam query
-        query = f"name=	{safe_folder_name}" and mimeType=	application/vnd.google-apps.folder" and 	{parent_folder_id}" in parents and trashed=false"
+        query = f"name='{safe_folder_name}' and mimeType='application/vnd.google-apps.folder' and '{parent_folder_id}' in parents and trashed=false"
         response = service.files().list(q=query, spaces="drive", fields="files(id, name)").execute()
         folders = response.get("files", [])
         if folders:
