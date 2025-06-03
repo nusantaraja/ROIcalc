@@ -126,7 +126,7 @@ def get_google_credentials(secrets):
         required_keys = ("type", "project_id", "private_key_id", "private_key", "client_email", "client_id", "auth_uri", "token_uri")
         if not all(k in credentials_info for k in required_keys):
             # Perbaikan: Menggunakan kutip yang benar di f-string
-            st.sidebar.error(f"Format kredensial dari 	{source}" tidak lengkap.")
+            st.sidebar.error(f"Format kredensial dari {source} tidak lengkap.")
             return None, "Error", True
         return credentials_info, source, show_api_settings
     else:
