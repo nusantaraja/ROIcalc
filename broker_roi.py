@@ -461,7 +461,7 @@ if calculate_button:
     with st.spinner("Membuat file PDF proposal..."):
         # Perbaikan: Memasukkan data yang benar ke generate_pdf
         pdf_data = {
-            "proposal_number": final_proposal_number,
+            "proposal_number": next_proposal_num,
             "analysis_date": current_time.strftime("%d %B %Y"),
             "prospect_name": prospect_name,
             "prospect_location": prospect_location,
