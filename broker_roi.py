@@ -527,7 +527,7 @@ if calculate_button:
         # --- Log ke Google Sheet (Menampilkan error jika gagal) --- 
         if trigger_gsheet_log and gsheets_service:
             log_data = {
-                "proposal_number": final_proposal_number,
+                "proposal_number": next_proposal_num,
                 "agent_name": agent_name,
                 "agent_email": agent_email,
                 "agent_phone": agent_phone,
