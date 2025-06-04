@@ -508,7 +508,7 @@ if calculate_button:
     if pdf_bytes:
         safe_prospect_name = "".join(c for c in prospect_name if c.isalnum() or c in (" ", "_", "-")).strip()
         safe_location = "".join(c for c in prospect_location if c.isalnum() or c in (" ", "_", "-")).strip()
-        pdf_filename = f"{final_proposal_number} {safe_prospect_name} {safe_location}.pdf"
+        pdf_filename = f"{next_proposal_num} {safe_prospect_name} {safe_location}.pdf"
 
         st.download_button(
             label="📥 Unduh PDF",
