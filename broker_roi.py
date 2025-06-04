@@ -460,6 +460,7 @@ if calculate_button:
     pdf_bytes = None
     with st.spinner("Membuat file PDF proposal..."):
         # Perbaikan: Memasukkan data yang benar ke generate_pdf
+        current_time = datetime.now() # Define current_time here
         pdf_data = {
             "proposal_number": next_proposal_num,
             "analysis_date": current_time.strftime("%d %B %Y"),
