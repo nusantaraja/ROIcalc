@@ -189,7 +189,7 @@ def log_to_gsheet(service, sheet_id, log_data):
                 log_data.get("proposal_number", ""),
                 log_data.get("agent_name", ""),
                 log_data.get("agent_email", ""),
-                log_data.get("agent_phone", ""),
+                f"'{log_data.get('agent_phone', '')}" if str(log_data.get('agent_phone', '')).startswith('0') else log_data.get('agent_phone', ''), # Add prefix ' if starts with 0
                 log_data.get("prospect_name", ""),
                 log_data.get("prospect_location", ""),
                 log_data.get("gdrive_link", "")
@@ -270,10 +270,10 @@ if credentials_info and google_sheet_id_secret:
 # --- Input Data --- 
 with st.sidebar:
     st.header("⚙️ Input Data")
-    st.subheader("Informasi Agent/Marketing")
-    agent_name = st.text_input("Nama Agent/Marketing", "")
-    agent_email = st.text_input("Email Agent/Marketing", "")
-    agent_phone = st.text_input("No. HP/WA Agent/Marketing", "")
+    st.subheader("Informasi Konsultan")
+    agent_name = st.text_input("Nama Konsultan", "")
+    agent_email = st.text_input("Email Konsultan", "")
+    agent_phone = st.text_input("No. HP/WA Konsultan", "")
     st.subheader("Informasi Proposal & Prospek")
     st.text_input("Nomor Proposal (Otomatis)", value=next_proposal_num, disabled=True)
     prospect_name = st.text_input("Nama Prospek (Broker Forex)", "PT Contoh Broker")
